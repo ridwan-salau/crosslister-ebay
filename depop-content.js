@@ -444,9 +444,12 @@ function showSignupModal() {
       (response) => {
         if (response && response.success) {
           overlay.remove();
-          showToast('✓ Thanks! You\'ll be notified of updates.');
+          showToast('✓ Opening signup form...');
+          if (response.url) {
+            window.open(response.url, '_blank');
+          }
         } else {
-          errorEl.textContent = 'Failed to submit. Check your webhook URL in extension settings.';
+          errorEl.textContent = 'Signup form is not yet configured.';
           errorEl.style.display = 'block';
         }
       }

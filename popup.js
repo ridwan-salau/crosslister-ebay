@@ -5,7 +5,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const priceBufferInput = document.getElementById('priceBuffer');
   const shippingSelect = document.getElementById('shippingPreference');
   const aiToggle = document.getElementById('aiEnabled');
-  const webhookUrlInput = document.getElementById('webhookUrl');
   const saveBtn = document.getElementById('saveBtn');
   const clearBtn = document.getElementById('clearBtn');
   const statusEl = document.getElementById('status');
@@ -13,13 +12,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load saved settings
   chrome.storage.local.get(
-    ['geminiKey', 'priceBuffer', 'shippingPreference', 'aiEnabled', 'webhookUrl'],
+    ['geminiKey', 'priceBuffer', 'shippingPreference', 'aiEnabled'],
     (result) => {
       if (result.geminiKey) geminiKeyInput.value = result.geminiKey;
       if (result.priceBuffer !== undefined) priceBufferInput.value = result.priceBuffer;
       else priceBufferInput.value = 10;
       if (result.shippingPreference) shippingSelect.value = result.shippingPreference;
-      if (result.webhookUrl) webhookUrlInput.value = result.webhookUrl;
       aiToggle.checked = result.aiEnabled === true;
     }
   );
@@ -33,8 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
       geminiKey: geminiKeyInput.value.trim(),
       priceBuffer: parseInt(priceBufferInput.value, 10) || 0,
       shippingPreference: shippingSelect.value,
-      aiEnabled: aiToggle.checked,
-      webhookUrl: webhookUrlInput.value.trim()
+      aiEnabled: aiToggle.checked
     };
 
     chrome.storage.local.set(settings, () => {

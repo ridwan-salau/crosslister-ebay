@@ -12,7 +12,7 @@ The extension makes network requests only to:
 
 - **eBay.com and Depop.com** — to scrape listing data and populate forms, using the user's existing authenticated browser session
 - **Google Gemini API** (`generativelanguage.googleapis.com`) — only when the user has explicitly enabled AI features and provided their own API key
-- **A user-configured webhook URL** — only if the extension owner has configured a signup webhook and the end user voluntarily submits their name and email through the in-app "Stay updated" form
+- **A Google Form** — only when the user voluntarily submits their name and email through the optional "Stay updated" prompt. The data goes directly to a Google Form configured by the extension owner; it is not stored or processed by the extension itself
 
 No analytics, no tracking, no telemetry, no third-party data sharing.
 

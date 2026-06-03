@@ -1,5 +1,13 @@
 // background.js — service worker for eBay → Depop crosslister
 
+// Pre-filled Google Form URL for signups — replace with your own before publishing.
+// 1. Create a Google Form with "Full Name" and "Email" fields
+// 2. Click "Get pre-filled link" from the ⋮ menu, fill in test values, copy the URL
+// 3. Replace NAME_PLACEHOLDER and EMAIL_PLACEHOLDER in the template below
+const SIGNUP_FORM_TEMPLATE = '';  // e.g. 'https://docs.google.com/forms/d/e/.../viewform?usp=pp_url&entry.123=NAME_PLACEHOLDER&entry.456=EMAIL_PLACEHOLDER'
+const SIGNUP_NAME_TOKEN = 'NAME_PLACEHOLDER';
+const SIGNUP_EMAIL_TOKEN = 'EMAIL_PLACEHOLDER';
+
 let stagedItem = null;
 let listingHistory = [];
 let signupCount = 0;
@@ -179,32 +187,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse({ success: true });
   }
 
-  // --- Submit signup to webhook ---
+  // --- Submit signup (opens pre-filled Google Form) ---
   if (request.action === 'SUBMIT_SIGNUP') {
-    chrome.storage.local.get(['webhookUrl'], (settings) => {
-      if (!settings.webhookUrl) {
-        sendResponse({ error: 'No webhook URL configured' });
-        return;
-      }
-      fetch(settings.webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: request.data.name,
-          email: request.data.email,
-          source: 'ebay-depop-crosslister',
-          timestamp: new Date().toISOString()
-        })
-      })
-        .then(() => {
-          signupDismissed = true;
-          signupCount = 0;
-          saveSignupState();
-          sendResponse({ success: true });
-        })
-        .catch(err => sendResponse({ error: err.message }));
-    });
-    return true; // async
+    if (!SIGNUP_FORM_TEMPLATE) {
+      sendResponse({ error: 'No signup form configured' });
+      return;
+    }
+    const url = SIGNUP_FORM_TEMPLATE
+      .replace(SIGNUP_NAME_TOKEN, encodeURIComponent(request.data.name || ''))
+      .replace(SIGNUP_EMAIL_TOKEN, encodeURIComponent(request.data.email || ''));
+    signupDismissed = true;
+    signupCount = 0;
+    saveSignupState();
+    sendResponse({ success: true, url });
   }
 
   // --- Get history ---

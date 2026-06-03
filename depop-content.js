@@ -225,11 +225,16 @@ async function fillDepopForm(item) {
     }
   }
 
+  chrome.runtime.sendMessage({ action: 'CONSUME_STAGED' });
+
   chrome.runtime.sendMessage({
     action: 'LOG_LISTING',
     data: { ebayTitle: item.title, ebayId: item.itemId, price: adjustedPrice }
+  }, (response) => {
+    if (response && response.showSignup) {
+      setTimeout(() => showSignupModal(), 2000);
+    }
   });
-  chrome.runtime.sendMessage({ action: 'CONSUME_STAGED' });
 
   updateBanner(`✓ Done! ${filled} fields filled. Review and publish.`);
   showToast(`✓ ${filled} fields pasted — review and publish on Depop.`);
@@ -388,6 +393,77 @@ async function clickComboboxOption(inputId, menuId, index) {
     return true;
   }
   return false;
+}
+
+// --- Signup modal ---
+function showSignupModal() {
+  if (document.getElementById('xlister-signup-overlay')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'xlister-signup-overlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:99999999;
+    background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+  `;
+
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    background:#fff;border-radius:12px;padding:28px 24px 20px;max-width:380px;width:90%;
+    box-shadow:0 8px 32px rgba(0,0,0,.25);text-align:center;
+  `;
+  modal.innerHTML = `
+    <h2 style="margin:0 0 4px;font-size:18px;color:#1a1a1a;">Stay updated</h2>
+    <p style="margin:0 0 16px;font-size:13px;color:#888;">Get notified about new features and improvements.</p>
+    <input id="xlister-signup-name" type="text" placeholder="Full name" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
+    <input id="xlister-signup-email" type="email" placeholder="Email address" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;margin-bottom:16px;box-sizing:border-box;">
+    <div style="display:flex;gap:8px;">
+      <button id="xlister-signup-submit" style="flex:1;padding:10px;background:#ff0050;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;">Notify me</button>
+      <button id="xlister-signup-dismiss" style="flex:1;padding:10px;background:#f0f0f0;color:#555;border:none;border-radius:6px;font-size:14px;cursor:pointer;">No thanks</button>
+    </div>
+    <p id="xlister-signup-error" style="margin:8px 0 0;font-size:12px;color:#c62828;display:none;"></p>
+  `;
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  const nameInput = document.getElementById('xlister-signup-name');
+  const emailInput = document.getElementById('xlister-signup-email');
+  const errorEl = document.getElementById('xlister-signup-error');
+
+  document.getElementById('xlister-signup-submit').onclick = () => {
+    const name = nameInput.value.trim();
+    const email = emailInput.value.trim();
+    if (!email || !email.includes('@')) {
+      errorEl.textContent = 'Please enter a valid email address.';
+      errorEl.style.display = 'block';
+      return;
+    }
+    chrome.runtime.sendMessage(
+      { action: 'SUBMIT_SIGNUP', data: { name, email } },
+      (response) => {
+        if (response && response.success) {
+          overlay.remove();
+          showToast('✓ Thanks! You\'ll be notified of updates.');
+        } else {
+          errorEl.textContent = 'Failed to submit. Check your webhook URL in extension settings.';
+          errorEl.style.display = 'block';
+        }
+      }
+    );
+  };
+
+  document.getElementById('xlister-signup-dismiss').onclick = () => {
+    chrome.runtime.sendMessage({ action: 'DISMISS_SIGNUP' });
+    overlay.remove();
+  };
+
+  overlay.onclick = (e) => {
+    if (e.target === overlay) {
+      chrome.runtime.sendMessage({ action: 'DISMISS_SIGNUP' });
+      overlay.remove();
+    }
+  };
 }
 
 function escapeHtml(str) {

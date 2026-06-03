@@ -2,13 +2,29 @@
 
 let stagedItem = null;
 let listingHistory = [];
+let signupCount = 0;
+let signupThreshold = 0;
+let signupDismissed = false;
 
-// Restore history from storage on startup
-chrome.storage.local.get(['listingHistory'], (result) => {
-  if (result.listingHistory) {
-    listingHistory = result.listingHistory;
+// Restore state from storage on startup
+chrome.storage.local.get(
+  ['listingHistory', 'signupCount', 'signupThreshold', 'signupDismissed'],
+  (result) => {
+    if (result.listingHistory) listingHistory = result.listingHistory;
+    if (result.signupCount !== undefined) signupCount = result.signupCount;
+    if (result.signupThreshold !== undefined) signupThreshold = result.signupThreshold;
+    else signupThreshold = randomThreshold();
+    if (result.signupDismissed !== undefined) signupDismissed = result.signupDismissed;
   }
-});
+);
+
+function randomThreshold() {
+  return Math.floor(Math.random() * 5) + 3; // 3–7
+}
+
+function saveSignupState() {
+  chrome.storage.local.set({ signupCount, signupThreshold, signupDismissed });
+}
 
 function saveHistory() {
   // Keep last 50 entries
@@ -137,7 +153,58 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       status: 'listed'
     });
     saveHistory();
+
+    // Signup prompt tracking
+    if (!signupDismissed) {
+      signupCount++;
+      if (signupCount >= signupThreshold) {
+        signupCount = 0;
+        signupThreshold = randomThreshold();
+        saveSignupState();
+        sendResponse({ success: true, showSignup: true });
+        return true;
+      }
+      saveSignupState();
+    }
+
     sendResponse({ success: true });
+  }
+
+  // --- Signup prompt dismissed ---
+  if (request.action === 'DISMISS_SIGNUP') {
+    signupCount = 0;
+    signupThreshold = randomThreshold();
+    signupDismissed = true;
+    saveSignupState();
+    sendResponse({ success: true });
+  }
+
+  // --- Submit signup to webhook ---
+  if (request.action === 'SUBMIT_SIGNUP') {
+    chrome.storage.local.get(['webhookUrl'], (settings) => {
+      if (!settings.webhookUrl) {
+        sendResponse({ error: 'No webhook URL configured' });
+        return;
+      }
+      fetch(settings.webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: request.data.name,
+          email: request.data.email,
+          source: 'ebay-depop-crosslister',
+          timestamp: new Date().toISOString()
+        })
+      })
+        .then(() => {
+          signupDismissed = true;
+          signupCount = 0;
+          saveSignupState();
+          sendResponse({ success: true });
+        })
+        .catch(err => sendResponse({ error: err.message }));
+    });
+    return true; // async
   }
 
   // --- Get history ---

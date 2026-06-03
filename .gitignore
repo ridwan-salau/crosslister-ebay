@@ -1,0 +1,24 @@
+# Secrets / environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+.claude/
+
+# Project ephemera
+task.md
+
+# Chrome extension packed
+*.crx
+*.pem
+
+# Node (if added later)
+node_modules/
+package-lock.json

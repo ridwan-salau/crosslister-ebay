@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "eBay to Depop Crosslister",
+  "version": "1.0.0",
+  "description": "Cross-list your eBay listings to Depop with one click.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.ebay.com/*",
+    "https://*.depop.com/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.ebay.com/itm/*"],
+      "js": ["ebay-content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.depop.com/products/create/*",
+        "https://www.depop.com/products/*/edit*",
+        "https://www.depop.com/sell*",
+        "https://www.depop.com/listing*"
+      ],
+      "js": ["depop-content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "eBay → Depop Crosslister"
+  },
+  "icons": {}
+}

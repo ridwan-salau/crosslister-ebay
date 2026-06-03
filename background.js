@@ -4,9 +4,9 @@
 // 1. Create a Google Form with "Full Name" and "Email" fields
 // 2. Click "Get pre-filled link" from the ⋮ menu, fill in test values, copy the URL
 // 3. Replace NAME_PLACEHOLDER and EMAIL_PLACEHOLDER in the template below
-const SIGNUP_FORM_TEMPLATE = '';  // e.g. 'https://docs.google.com/forms/d/e/.../viewform?usp=pp_url&entry.123=NAME_PLACEHOLDER&entry.456=EMAIL_PLACEHOLDER'
+const SIGNUP_FORM_TEMPLATE = 'https://docs.google.com/forms/d/e/1FAIpQLScZCVPNG0GXUarTaHXAcK-CCl3K7GzN1SUQMzDia7KyFZTFEw/viewform?usp=pp_url&entry.2005620554=NAME_PLACEHOLDER&entry.1045781291=EMAIL_PLACEHOLDER@email.com';  // e.g. 'https://docs.google.com/forms/d/e/.../viewform?usp=pp_url&entry.123=NAME_PLACEHOLDER&entry.456=EMAIL_PLACEHOLDER'
 const SIGNUP_NAME_TOKEN = 'NAME_PLACEHOLDER';
-const SIGNUP_EMAIL_TOKEN = 'EMAIL_PLACEHOLDER';
+const SIGNUP_EMAIL_TOKEN = 'EMAIL_PLACEHOLDER@email.com';
 
 let stagedItem = null;
 let listingHistory = [];

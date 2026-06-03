@@ -5,6 +5,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const priceBufferInput = document.getElementById('priceBuffer');
   const shippingSelect = document.getElementById('shippingPreference');
   const aiToggle = document.getElementById('aiEnabled');
+  const signupName = document.getElementById('signupName');
+  const signupEmail = document.getElementById('signupEmail');
+  const signupBtn = document.getElementById('signupBtn');
+  const signupStatusEl = document.getElementById('signupStatus');
   const saveBtn = document.getElementById('saveBtn');
   const clearBtn = document.getElementById('clearBtn');
   const statusEl = document.getElementById('status');
@@ -79,6 +83,42 @@ document.addEventListener('DOMContentLoaded', () => {
         historyEl.innerHTML = '<div class="history-empty">No listings yet. Cross-list your first item!</div>';
       }
     });
+  }
+
+  // Signup
+  signupBtn.addEventListener('click', () => {
+    const name = signupName.value.trim();
+    const email = signupEmail.value.trim();
+    if (!email || !email.includes('@')) {
+      showSignupStatus('Enter a valid email address.', 'error');
+      return;
+    }
+    signupBtn.disabled = true;
+    signupBtn.innerText = 'Submitting...';
+    chrome.runtime.sendMessage(
+      { action: 'SUBMIT_SIGNUP', data: { name, email } },
+      (response) => {
+        if (response && response.success) {
+          showSignupStatus('✓ Done — opening form...', 'success');
+          if (response.url) window.open(response.url, '_blank');
+          signupName.value = '';
+          signupEmail.value = '';
+        } else {
+          showSignupStatus('Signup form not configured yet.', 'error');
+        }
+        signupBtn.disabled = false;
+        signupBtn.innerText = 'Get notified of updates';
+      }
+    );
+  });
+
+  function showSignupStatus(msg, type) {
+    signupStatusEl.innerText = msg;
+    signupStatusEl.className = 'status ' + type;
+    setTimeout(() => {
+      signupStatusEl.className = 'status';
+      signupStatusEl.style.display = 'none';
+    }, 3000);
   }
 
   function escapeHtml(str) {

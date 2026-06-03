@@ -4,9 +4,7 @@
   "version": "1.0.0",
   "description": "Cross-list your eBay listings to Depop with one click.",
   "permissions": [
-    "activeTab",
-    "storage",
-    "scripting"
+    "storage"
   ],
   "host_permissions": [
     "https://*.ebay.com/*",

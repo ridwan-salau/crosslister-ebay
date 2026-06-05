@@ -143,6 +143,7 @@ function extractEbayData() {
   const price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
 
   // Description — iframe is cross-origin, fetched async via background worker
+  const description = '';
 
   // Images — prefer data-zoom-src (highest resolution)
   const images = [];

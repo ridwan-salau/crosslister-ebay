@@ -1,6 +1,7 @@
 // popup.js — settings and history for the extension toolbar popup
 
 document.addEventListener('DOMContentLoaded', () => {
+  const platformRadios = document.querySelectorAll('input[name="platform"]');
   const geminiKeyInput = document.getElementById('geminiKey');
   const priceBufferInput = document.getElementById('priceBuffer');
   const shippingSelect = document.getElementById('shippingPreference');
@@ -16,8 +17,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load saved settings
   chrome.storage.local.get(
-    ['geminiKey', 'priceBuffer', 'shippingPreference', 'aiEnabled'],
+    ['targetPlatform', 'geminiKey', 'priceBuffer', 'shippingPreference', 'aiEnabled'],
     (result) => {
+      const selected = result.targetPlatform || 'depop';
+      platformRadios.forEach(r => { r.checked = r.value === selected; });
       if (result.geminiKey) geminiKeyInput.value = result.geminiKey;
       if (result.priceBuffer !== undefined) priceBufferInput.value = result.priceBuffer;
       else priceBufferInput.value = 0;
@@ -26,16 +29,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   );
 
+  // Save platform immediately on change
+  platformRadios.forEach(r => {
+    r.addEventListener('change', () => {
+      if (r.checked) {
+        chrome.storage.local.set({ targetPlatform: r.value });
+      }
+    });
+  });
+
   // Load history
   loadHistory();
 
   // Save
   saveBtn.addEventListener('click', () => {
+    const selected = document.querySelector('input[name="platform"]:checked');
     const settings = {
+      targetPlatform: selected ? selected.value : 'depop',
       geminiKey: geminiKeyInput.value.trim(),
       priceBuffer: parseInt(priceBufferInput.value, 10) || 0,
       shippingPreference: shippingSelect.value,
-      aiEnabled: aiToggle.checked
+      aiEnabled: aiToggle.checked,
     };
 
     chrome.storage.local.set(settings, () => {

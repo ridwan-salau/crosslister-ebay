@@ -1,23 +1,30 @@
 {
   "manifest_version": 3,
-  "name": "eBay to Depop Crosslister",
-  "version": "1.0.0",
-  "description": "Cross-list your eBay listings to Depop with one click.",
+  "name": "eBay Cross-Lister",
+  "version": "2.0.0",
+  "description": "Cross-list your eBay listings to Depop, Poshmark, and Mercari with one click.",
   "permissions": [
     "storage"
   ],
   "host_permissions": [
     "https://*.ebay.com/*",
     "https://*.depop.com/*",
+    "https://*.poshmark.com/*",
+    "https://*.mercari.com/*",
     "https://generativelanguage.googleapis.com/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background-wrapper.js"
   },
   "content_scripts": [
     {
       "matches": ["https://www.ebay.com/itm/*"],
-      "js": ["ebay-content.js"],
+      "js": [
+        "marketplaces/registry.js",
+        "shared/message-client.js",
+        "shared/dom-utils.js",
+        "content/ebay.js"
+      ],
       "run_at": "document_idle"
     },
     {
@@ -27,13 +34,63 @@
         "https://www.depop.com/sell*",
         "https://www.depop.com/listing*"
       ],
-      "js": ["depop-content.js"],
+      "js": [
+        "marketplaces/registry.js",
+        "shared/message-client.js",
+        "shared/dom-utils.js",
+        "shared/react-utils.js",
+        "shared/combobox-utils.js",
+        "shared/image-utils.js",
+        "shared/ui-utils.js",
+        "marketplaces/depop/config.js",
+        "content/base-filler.js",
+        "content/depop.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://poshmark.com/create-listing*",
+        "https://poshmark.com/closet/*",
+        "https://poshmark.com/listing/*"
+      ],
+      "js": [
+        "marketplaces/registry.js",
+        "shared/message-client.js",
+        "shared/dom-utils.js",
+        "shared/react-utils.js",
+        "shared/combobox-utils.js",
+        "shared/image-utils.js",
+        "shared/ui-utils.js",
+        "marketplaces/poshmark/config.js",
+        "content/base-filler.js",
+        "content/poshmark.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.mercari.com/sell*",
+        "https://www.mercari.com/listing*"
+      ],
+      "js": [
+        "marketplaces/registry.js",
+        "shared/message-client.js",
+        "shared/dom-utils.js",
+        "shared/react-utils.js",
+        "shared/combobox-utils.js",
+        "shared/image-utils.js",
+        "shared/ui-utils.js",
+        "marketplaces/mercari/config.js",
+        "content/base-filler.js",
+        "content/mercari.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "eBay → Depop Crosslister"
+    "default_title": "eBay Cross-Lister"
   },
   "icons": {}
 }

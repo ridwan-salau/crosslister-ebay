@@ -118,15 +118,44 @@
     .history-item .title { font-weight: 500; color: #333; }
     .history-item .meta { color: #999; margin-top: 2px; }
     .history-empty { color: #bbb; font-size: 12px; text-align: center; padding: 16px; }
+
+    .platform-options { display: flex; gap: 6px; }
+    .platform-option {
+      flex: 1; text-align: center; cursor: pointer;
+      padding: 8px 4px; border-radius: 6px; border: 1px solid #ddd;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .platform-option input { display: none; }
+    .platform-option:has(input:checked) { border-color: #ff0050; background: #fff5f8; }
+    .platform-label { font-size: 12px; font-weight: 500; color: #555; display: block; }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>eBay → Depop</h1>
-    <p>Cross-lister Extension</p>
+    <h1>eBay Cross-Lister</h1>
+    <p>One-click to any marketplace</p>
   </div>
 
   <div class="content">
+    <!-- Platform -->
+    <div class="section">
+      <div class="section-title">Target Platform</div>
+      <div class="platform-options" id="platformOptions">
+        <label class="platform-option" id="plat-depop">
+          <input type="radio" name="platform" value="depop" checked>
+          <span class="platform-label">Depop</span>
+        </label>
+        <label class="platform-option" id="plat-poshmark">
+          <input type="radio" name="platform" value="poshmark">
+          <span class="platform-label">Poshmark</span>
+        </label>
+        <label class="platform-option" id="plat-mercari">
+          <input type="radio" name="platform" value="mercari">
+          <span class="platform-label">Mercari</span>
+        </label>
+      </div>
+    </div>
+
     <!-- Settings -->
     <div class="section">
       <div class="section-title">Settings</div>

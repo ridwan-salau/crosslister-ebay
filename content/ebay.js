@@ -1,7 +1,15 @@
-// ebay-content.js — runs on eBay listing pages, injects "Copy to Depop" button
+// content/ebay.js — eBay scraper with platform-aware "Copy to..." button
 
 const BUTTON_ID = 'xlister-ebay-btn';
 const STATUS_ID = 'xlister-ebay-status';
+
+// Read target platform from storage (defaults to depop)
+let targetPlatform = null;
+
+chrome.storage.local.get(['targetPlatform'], (result) => {
+  targetPlatform = getPlatform(result.targetPlatform || 'depop');
+  injectButton();
+});
 
 function injectButton() {
   if (document.getElementById(BUTTON_ID)) return;
@@ -29,17 +37,17 @@ function injectButton() {
 }
 
 function injectNear(el) {
+  const platform = targetPlatform || getPlatform('depop');
   const wrapper = document.createElement('div');
   wrapper.id = 'xlister-container';
   wrapper.style.cssText = 'margin:12px 0;display:flex;align-items:center;gap:8px;z-index:9999;position:relative;';
 
   const btn = document.createElement('button');
   btn.id = BUTTON_ID;
-  btn.innerText = '⚡ Copy to Depop';
-  btn.style.cssText =
-    'background:#ff0050;color:white;padding:10px 16px;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 2px 8px rgba(255,0,80,0.3);transition:transform .1s,box-shadow .1s;';
-  btn.onmouseenter = () => { btn.style.transform = 'scale(1.03)'; btn.style.boxShadow = '0 4px 14px rgba(255,0,80,0.4)'; };
-  btn.onmouseleave = () => { btn.style.transform = 'scale(1)'; btn.style.boxShadow = '0 2px 8px rgba(255,0,80,0.3)'; };
+  btn.innerText = `⚡ Copy to ${platform.name}`;
+  btn.style.cssText = `background:${platform.color};color:white;padding:10px 16px;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,0.2);transition:transform .1s,box-shadow .1s;`;
+  btn.onmouseenter = () => { btn.style.transform = 'scale(1.03)'; btn.style.boxShadow = '0 4px 14px rgba(0,0,0,0.3)'; };
+  btn.onmouseleave = () => { btn.style.transform = 'scale(1)'; btn.style.boxShadow = '0 2px 8px rgba(0,0,0,.2)'; };
   btn.onclick = handleCopyClick;
 
   const status = document.createElement('span');
@@ -55,15 +63,15 @@ function injectNear(el) {
 }
 
 function injectFloating() {
+  const platform = targetPlatform || getPlatform('depok');
   const wrapper = document.createElement('div');
   wrapper.id = 'xlister-container';
   wrapper.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:999999;display:flex;flex-direction:column;align-items:flex-end;gap:8px;';
 
   const btn = document.createElement('button');
   btn.id = BUTTON_ID;
-  btn.innerText = '⚡ Copy to Depop';
-  btn.style.cssText =
-    'background:#ff0050;color:white;padding:12px 20px;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:15px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 4px 16px rgba(255,0,80,0.4);transition:transform .15s;';
+  btn.innerText = `⚡ Copy to ${platform.name}`;
+  btn.style.cssText = `background:${platform.color};color:white;padding:12px 20px;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:15px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.3);transition:transform .15s;`;
   btn.onmouseenter = () => { btn.style.transform = 'scale(1.05)'; };
   btn.onmouseleave = () => { btn.style.transform = 'scale(1)'; };
   btn.onclick = handleCopyClick;
@@ -78,6 +86,7 @@ function injectFloating() {
 }
 
 async function handleCopyClick() {
+  const platform = targetPlatform || getPlatform('depop');
   const btn = document.getElementById(BUTTON_ID);
   const status = document.getElementById(STATUS_ID);
   btn.disabled = true;
@@ -87,34 +96,31 @@ async function handleCopyClick() {
   try {
     const data = extractEbayData();
     if (!data.title) {
-      throw new Error('Could not read listing title. Make sure you are on an eBay item page (URL contains /itm/).');
+      throw new Error('Could not read listing title. Make sure you are on an eBay item page.');
     }
 
-    // If meta description is empty, try fetching the iframe via background
     if (!data.description) {
       status.innerText = 'Fetching description...';
       data.description = await fetchDescriptionViaBackground() || '';
     }
 
-    status.innerText = 'Sending to background...';
+    status.innerText = `Opening ${platform.name}...`;
     chrome.runtime.sendMessage({ action: 'STAGE_LISTING', data }, (response) => {
-      if (chrome.runtime.lastError) {
-        status.innerText = 'Error: ' + chrome.runtime.lastError.message;
+      if (chrome.runtime.lastError || !response || !response.success) {
+        status.innerText = 'Error: ' + (chrome.runtime.lastError?.message || 'unknown');
         btn.disabled = false;
-        btn.innerText = '⚡ Copy to Depop';
+        btn.innerText = `⚡ Copy to ${platform.name}`;
         return;
       }
-      if (response && response.success) {
-        status.innerText = '✓ Staged! Opening Depop...';
-        btn.innerText = '✓ Done';
-        btn.style.background = '#2ecc71';
-        window.open('https://www.depop.com/products/create/', '_blank');
-      }
+      status.innerText = `✓ Staged! Opening ${platform.name}...`;
+      btn.innerText = '✓ Done';
+      btn.style.background = '#2ecc71';
+      window.open(platform.createUrl, '_blank');
     });
   } catch (err) {
     status.innerText = 'Error: ' + err.message;
     btn.disabled = false;
-    btn.innerText = '⚡ Copy to Depop';
+    btn.innerText = `⚡ Copy to ${platform.name}`;
   }
 }
 
@@ -122,7 +128,6 @@ function extractEbayData() {
   const itemIdMatch = window.location.pathname.match(/\/itm\/(\d+)/);
   const itemId = itemIdMatch ? itemIdMatch[1] : '';
 
-  // Title
   const titleEl = document.querySelector('.x-item-title__mainTitle') ||
                   document.querySelector('[data-testid="x-item-title"]') ||
                   document.querySelector('.it-ttl') ||
@@ -130,7 +135,6 @@ function extractEbayData() {
                   document.querySelector('h1');
   const title = titleEl ? titleEl.innerText.trim() : '';
 
-  // Price — prefer Buy It Now
   let priceText = '';
   const binPriceEl = document.querySelector('.x-bin-price .x-price-primary');
   if (binPriceEl) {
@@ -142,11 +146,9 @@ function extractEbayData() {
   }
   const price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
 
-  // Description — prefer meta tag (always available, no cross-origin issues)
   const metaDesc = document.querySelector('meta[name="description"]');
   const description = metaDesc ? metaDesc.getAttribute('content')?.trim() || '' : '';
 
-  // Images — prefer data-zoom-src (highest resolution)
   const images = [];
   document.querySelectorAll('.ux-image-carousel-item img, .ux-image-filmstrip-carousel-item img').forEach(img => {
     const src = img.getAttribute('data-zoom-src') || img.dataset.src || img.src;
@@ -163,7 +165,6 @@ function extractEbayData() {
     url.replace(/\/s-l(?:64|140|300|400|500|960|1000)\//, '/s-l1600/')
   );
 
-  // Category breadcrumbs (deduplicated)
   let category = '';
   const bcLinks = document.querySelectorAll('nav[aria-label="Breadcrumb"] a, .breadcrumb a, [data-testid="x-breadcrumb"] a');
   if (bcLinks.length > 0) {
@@ -174,7 +175,6 @@ function extractEbayData() {
       .join(' > ');
   }
 
-  // Condition, Brand, Size from elevated-info section
   let condition = '', brand = '', size = '';
   document.querySelectorAll('.elevated-info__item, [data-testid="x-elevated-info"] .elevated-info__item').forEach(item => {
     const label = item.querySelector('.elevated-info__item__label')?.innerText?.trim() || '';
@@ -184,7 +184,6 @@ function extractEbayData() {
     if (label === 'Size') size = value;
   });
 
-  // Shipping
   let shippingText = '';
   const shippingSection = document.querySelector('.ux-labels-values--shipping');
   if (shippingSection) {
@@ -201,7 +200,23 @@ function extractEbayData() {
   };
 }
 
-// Init with retry for lazy-loaded content
+async function fetchDescriptionViaBackground() {
+  const descIframe = document.querySelector('#desc_ifr');
+  if (!descIframe || !descIframe.src) return null;
+  return new Promise(resolve => {
+    try {
+      chrome.runtime.sendMessage(
+        { action: 'FETCH_TEXT', url: descIframe.src },
+        (response) => {
+          if (chrome.runtime.lastError) { resolve(null); return; }
+          resolve(response?.text || null);
+        }
+      );
+    } catch (e) { resolve(null); }
+  });
+}
+
+// Init with retry
 function tryInject(retries = 10, interval = 500) {
   injectButton();
   if (!document.getElementById(BUTTON_ID) && retries > 0) {
@@ -215,25 +230,7 @@ if (document.readyState === 'loading') {
   tryInject();
 }
 
-async function fetchDescriptionViaBackground() {
-  const descIframe = document.querySelector('#desc_ifr');
-  if (!descIframe || !descIframe.src) return null;
-  return new Promise(resolve => {
-    try {
-      chrome.runtime.sendMessage(
-        { action: 'FETCH_TEXT', url: descIframe.src },
-        (response) => {
-          if (chrome.runtime.lastError) { resolve(null); return; }
-          resolve(response?.text || null);
-        }
-      );
-    } catch (e) {
-      resolve(null);
-    }
-  });
-}
-
-// Re-inject on SPA navigation
+// SPA navigation
 let lastUrl = location.href;
 new MutationObserver(() => {
   if (location.href !== lastUrl) {

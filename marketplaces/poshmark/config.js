@@ -46,7 +46,7 @@ const poshmarkConfig = {
 
   // Hooks for Poshmark's price suggestion modal
   hooks: {
-    // Focus main price field → wait for modal → disable Smart Sell
+    // Focus main price field → wait for modal → disable Smart Sell → wait for Done
     prePrice: async function (value, settings) {
       var mainPrice = document.querySelector('[data-vv-name="listingPrice"]');
       if (mainPrice) {
@@ -55,12 +55,27 @@ const poshmarkConfig = {
         await sleep(1000);
       }
       var modal = document.querySelector('[data-test="modal-container"]');
-      if (!modal) return value;
+      if (!modal) { debugLog('poshmark', 'prePrice: modal not found'); return value; }
+
       var toggleInput = modal.querySelector('[data-test="toggle-input"]');
       if (toggleInput && toggleInput.checked) {
+        debugLog('poshmark', 'prePrice: disabling Smart Sell');
         var toggleLabel = modal.querySelector('[data-test="toggle-switch"]');
         if (toggleLabel) toggleLabel.click();
-        await sleep(300);
+        // Wait for Done button to become visible (it's hidden until Smart Sell is off)
+        await sleep(500);
+      }
+      debugLog('poshmark', 'prePrice: waiting for Done button');
+      // Wait for Done button to appear
+      var start = Date.now();
+      while (Date.now() - start < 3000) {
+        var doneBtn = document.querySelector('[data-test="modal-footer"] .btn--primary') ||
+                      document.querySelector('.modal__footer .btn--primary');
+        if (doneBtn && doneBtn.offsetParent !== null) {
+          debugLog('poshmark', 'prePrice: Done button visible');
+          break;
+        }
+        await sleep(200);
       }
       return value;
     },

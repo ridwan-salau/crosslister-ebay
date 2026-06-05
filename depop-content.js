@@ -36,6 +36,19 @@ function setReactTextarea(el, value) {
 }
 
 // --- Fuzzy matching ---
+// --- eBay → Depop condition mapping ---
+function mapCondition(ebayCondition) {
+  if (!ebayCondition) return '';
+  const c = ebayCondition.toLowerCase();
+  if (c.includes('new with tags')) return 'Brand new';
+  if (c.includes('new without tags')) return 'Like new';
+  if (c.includes('new with imperfections')) return 'Used - Good';
+  if (c.includes('pre-owned') && c.includes('excellent')) return 'Like new';
+  if (c.includes('pre-owned') && c.includes('good')) return 'Used - Good';
+  if (c.includes('pre-owned') && c.includes('fair')) return 'Used - Fair';
+  return '';
+}
+
 function matchScore(ebayText, optionText) {
   const e = ebayText.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
   const o = optionText.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -200,10 +213,14 @@ async function fillDepopForm(item) {
     filled++;
   }
 
-  // Condition
+  // Condition — use exact mapping table, fall back to fuzzy match
   updateBanner('✅ Filling condition...');
-  if (item.condition && await fillCombobox(DEPOP_IDS.conditionInput, DEPOP_IDS.conditionMenu, item.condition)) {
-    filled++;
+  if (item.condition) {
+    const mapped = mapCondition(item.condition);
+    const conditionText = mapped || item.condition;
+    if (await fillCombobox(DEPOP_IDS.conditionInput, DEPOP_IDS.conditionMenu, conditionText)) {
+      filled++;
+    }
   }
 
   // Shipping

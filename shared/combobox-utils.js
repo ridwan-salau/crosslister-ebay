@@ -36,6 +36,51 @@ function extractLeafCategory(categoryPath) {
   return parts[parts.length - 1] || '';
 }
 
+// Fill a click-to-select dropdown (no typing — click to open, find match, click it)
+async function fillClickDropdown(inputSelector, menuSelector, searchText, config) {
+  config = config || {};
+  var optionRole = config.optionRole || '.dropdown__menu__item, .dropdown__link';
+  var disabledAttr = config.disabledAttr || 'aria-disabled';
+
+  // Click the trigger to open the dropdown
+  var trigger = typeof inputSelector === 'string' && inputSelector.startsWith('.') || inputSelector.startsWith('#') || inputSelector.startsWith('[')
+    ? document.querySelector(inputSelector)
+    : document.getElementById(inputSelector);
+  if (!trigger) return { success: false, reason: 'trigger-not-found' };
+
+  trigger.click();
+  await sleep(800);
+
+  var menu = typeof menuSelector === 'string' && (menuSelector.startsWith('.') || menuSelector.startsWith('#') || menuSelector.startsWith('['))
+    ? document.querySelector(menuSelector)
+    : document.getElementById(menuSelector);
+  if (!menu) return { success: false, reason: 'menu-not-found' };
+
+  var options = Array.from(menu.querySelectorAll(optionRole))
+    .filter(function (opt) { return opt.getAttribute(disabledAttr) !== 'true' && opt.innerText.trim(); });
+
+  if (options.length === 0) return { success: false, reason: 'no-options' };
+
+  // Score and pick best
+  var bestOption = null, bestScore = 0;
+  for (var i = 0; i < options.length; i++) {
+    var text = options[i].innerText.trim();
+    var score = matchScore(searchText, text);
+    if (score > bestScore) { bestScore = score; bestOption = options[i]; }
+  }
+
+  if (bestOption && bestScore >= 0.15) {
+    bestOption.click();
+    await sleep(400);
+    return { success: true, matchedText: bestOption.innerText.trim(), score: bestScore };
+  }
+
+  // No match — close the dropdown
+  document.body.click();
+  await sleep(200);
+  return { success: false, reason: 'no-match' };
+}
+
 // Fill a combobox by typing progressive search terms and picking the best match
 async function fillCombobox(inputId, menuId, searchText, config) {
   config = config || {};

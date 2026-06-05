@@ -10,21 +10,25 @@ const poshmarkConfig = {
       description: '[data-vv-name="description"]',
     },
     input: {
-      // Modal price input — main form price is focused to trigger the modal
       price: '#listing-price-modal-listing-price-input',
     },
     combobox: {
-      category:  { input: '[data-et-prop-location="create_listing"]', menu: '.dropdown__menu' },
-      brand:     { input: '[data-et-name="listingEditorBrandSection"] input', menu: '.dropdown__menu' },
-      condition: { input: '[data-et-name="listing_condition"]', menu: '.dropdown__menu' },
+      // Click-to-select dropdowns — Poshmark doesn't use type-to-filter
+      category:  { input: '.listing-editor__category-container .dropdown__selector', menu: '.listing-editor__category-container .dropdown__menu' },
+      condition: { input: '.listing-editor__condition-container .dropdown__selector', menu: '.listing-editor__condition-container .dropdown__menu' },
+      size:      { input: '[data-test="size"]', menu: '.listing-editor__dropdown--large' },
+      color:     { input: '[data-et-name="color"]', menu: '.dropdown__menu--dark' },
+      brand:     { input: '[data-et-name="listingEditorBrandSection"] .dropdown__selector', menu: '.listing-editor__suggestions-list' },
     },
     imageUpload: {
       input: '#img-file-input',
     },
   },
 
+  // Click-to-select mode — Poshmark dropdowns open on click, not typing
   comboboxConfig: {
-    optionRole: '.dropdown__menu__item, .dropdown__link',
+    mode: 'click',
+    optionRole: '.dropdown__menu__item, .dropdown__link, li',
     disabledAttr: 'aria-disabled',
     noOptionsSelector: '',
     sectionHeaderSelector: '',
@@ -32,21 +36,18 @@ const poshmarkConfig = {
 
   conditionMap: {
     'new with tags': 'New With Tags',
-    'new without tags': 'New Without Tags',
+    'new without tags': 'Like New',
     'new with imperfections': 'Good',
     'excellent': 'Like New',
     'good': 'Good',
     'fair': 'Fair',
   },
 
-  // Price first — triggers modal that must be dismissed before other fields
-  fieldOrder: ['price', 'title', 'description', 'category', 'brand', 'condition', 'images'],
-  categoryDependentFields: [],
+  fieldOrder: ['price', 'title', 'description', 'category', 'size', 'color', 'brand', 'condition', 'images'],
+  categoryDependentFields: ['size'],
   categoryWaitMs: 0,
 
-  // Hooks for Poshmark's price suggestion modal
   hooks: {
-    // Focus main price field → wait for modal → disable Smart Sell → wait for Done
     prePrice: async function (value, settings) {
       var mainPrice = document.querySelector('[data-vv-name="listingPrice"]');
       if (mainPrice) {
@@ -56,31 +57,24 @@ const poshmarkConfig = {
       }
       var modal = document.querySelector('[data-test="modal-container"]');
       if (!modal) { debugLog('poshmark', 'prePrice: modal not found'); return value; }
-
       var toggleInput = modal.querySelector('[data-test="toggle-input"]');
       if (toggleInput && toggleInput.checked) {
         debugLog('poshmark', 'prePrice: disabling Smart Sell');
         var toggleLabel = modal.querySelector('[data-test="toggle-switch"]');
         if (toggleLabel) toggleLabel.click();
-        // Wait for Done button to become visible (it's hidden until Smart Sell is off)
         await sleep(500);
       }
       debugLog('poshmark', 'prePrice: waiting for Done button');
-      // Wait for Done button to appear
       var start = Date.now();
       while (Date.now() - start < 1000) {
         var doneBtn = document.querySelector('[data-test="modal-footer"] .btn--primary') ||
                       document.querySelector('.modal__footer .btn--primary');
-        if (doneBtn && doneBtn.offsetParent !== null) {
-          debugLog('poshmark', 'prePrice: Done button visible');
-          break;
-        }
+        if (doneBtn && doneBtn.offsetParent !== null) break;
         await sleep(200);
       }
       return value;
     },
 
-    // After price: fill original price, click Done to close modal
     postPrice: async function (value, settings) {
       await sleep(300);
       var origPriceInput = document.getElementById('listing-price-modal-original-price-input');
@@ -89,7 +83,6 @@ const poshmarkConfig = {
         setReactValue(origPriceInput, orig);
         await sleep(200);
       }
-      // Click Done — search globally in case modal DOM shifted
       var doneBtn = document.querySelector('[data-test="modal-footer"] .btn--primary') ||
                     document.querySelector('.modal__footer .btn--primary') ||
                     document.querySelector('.listing-price-suggestion-modal .btn--primary') ||
@@ -112,6 +105,8 @@ const poshmarkConfig = {
     description: { source: 'description', aiTransformable: true },
     price:    { source: 'price', applyBuffer: true, hasHooks: true },
     category: { source: 'category', useLeaf: true, fuzzyMatch: true },
+    size:     { source: 'size', fuzzyMatch: true, aiBatchable: true },
+    color:    { source: null }, // Will be set from eBay color if available, or skipped
     brand:    { source: 'brand', fuzzyMatch: true },
     condition:{ source: 'condition', useMap: 'conditionMap', fuzzyMatch: true },
     images:   { source: 'images', maxImages: 16, convertWebP: true },

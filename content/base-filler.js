@@ -109,7 +109,10 @@ async function fillForm(platformConfig, item, settings) {
 
     if (isCombobox) {
       const { input, menu } = cfg.selectors.combobox[fieldName];
-      const result = await fillCombobox(input, menu, String(value), cfg.comboboxConfig);
+      var useClick = cfg.comboboxConfig && cfg.comboboxConfig.mode === 'click';
+      var result = useClick
+        ? await fillClickDropdown(input, menu, String(value), cfg.comboboxConfig)
+        : await fillCombobox(input, menu, String(value), cfg.comboboxConfig);
       if (result.success) {
         filled++;
       } else if (mapping.aiBatchable && settings.geminiKey) {

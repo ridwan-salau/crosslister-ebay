@@ -90,7 +90,7 @@ async function handleCopyClick() {
       throw new Error('Could not read listing title. Make sure you are on an eBay item page (URL contains /itm/).');
     }
 
-    // If description is empty (cross-origin iframe), fetch it via background worker
+    // If meta description is empty, try fetching the iframe via background
     if (!data.description) {
       status.innerText = 'Fetching description...';
       data.description = await fetchDescriptionViaBackground() || '';
@@ -142,8 +142,9 @@ function extractEbayData() {
   }
   const price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
 
-  // Description — iframe is cross-origin, fetched async via background worker
-  const description = '';
+  // Description — prefer meta tag (always available, no cross-origin issues)
+  const metaDesc = document.querySelector('meta[name="description"]');
+  const description = metaDesc ? metaDesc.getAttribute('content')?.trim() || '' : '';
 
   // Images — prefer data-zoom-src (highest resolution)
   const images = [];

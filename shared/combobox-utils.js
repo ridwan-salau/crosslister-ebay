@@ -49,7 +49,7 @@ async function fillClickDropdown(inputSelector, menuSelector, searchText, config
   console.log('[Crosslister] fillClickDropdown trigger:', inputSelector, 'found:', !!trigger);
   if (!trigger) return { success: false, reason: 'trigger-not-found', selector: inputSelector };
 
-  trigger.click();
+  simulateClick(trigger);
   await sleep(800);
 
   var menu = typeof menuSelector === 'string'
@@ -78,7 +78,12 @@ async function fillClickDropdown(inputSelector, menuSelector, searchText, config
     if (score > bestScore) { bestScore = score; bestOption = options[i]; }
   }
 
+  // Dispatch full event sequence to bypass isTrusted checks
+  var eventTypes = ['mousedown', 'mouseup', 'click'];
   if (bestOption && bestScore >= 0.15) {
+    for (var ei = 0; ei < eventTypes.length; ei++) {
+      bestOption.dispatchEvent(new MouseEvent(eventTypes[ei], { bubbles: true, cancelable: true }));
+    }
     bestOption.click();
     await sleep(400);
     return { success: true, matchedText: bestOption.innerText.trim(), score: bestScore };
@@ -88,6 +93,16 @@ async function fillClickDropdown(inputSelector, menuSelector, searchText, config
   document.body.click();
   await sleep(200);
   return { success: false, reason: 'no-match' };
+}
+
+// Simulate a full click on an element (mousedown + mouseup + click)
+function simulateClick(el) {
+  if (!el) return;
+  var events = ['mousedown', 'mouseup', 'click'];
+  for (var i = 0; i < events.length; i++) {
+    el.dispatchEvent(new MouseEvent(events[i], { bubbles: true, cancelable: true }));
+  }
+  el.click();
 }
 
 // Read options from a click dropdown (for AI batch matching)
@@ -101,7 +116,7 @@ async function readClickDropdownOptions(inputSelector, menuSelector, config) {
     : document.getElementById(inputSelector);
   if (!trigger) return [];
 
-  trigger.click();
+  simulateClick(trigger);
   await sleep(800);
 
   var menu = typeof menuSelector === 'string'
@@ -126,7 +141,7 @@ async function clickDropdownOption(inputSelector, menuSelector, index, config) {
     : document.getElementById(inputSelector);
   if (!trigger) return false;
 
-  trigger.click();
+  simulateClick(trigger);
   await sleep(800);
 
   var menu = typeof menuSelector === 'string'

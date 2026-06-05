@@ -67,24 +67,27 @@ const poshmarkConfig = {
 
     // After price: fill original price, click Done to close modal
     postPrice: async function (value, settings) {
-      var modal = document.querySelector('[data-test="modal-container"]');
-      if (!modal) { debugLog('poshmark', 'postPrice: modal not found'); return; }
+      await sleep(300);
       var origPriceInput = document.getElementById('listing-price-modal-original-price-input');
       if (origPriceInput && settings.priceBuffer > 0) {
         var orig = (parseFloat(value) / (1 + settings.priceBuffer / 100)).toFixed(2);
         setReactValue(origPriceInput, orig);
         await sleep(200);
       }
-      // Try multiple selectors for the Done button
-      var doneBtn = modal.querySelector('[data-test="modal-footer"] .btn--primary') ||
-                    modal.querySelector('.modal__footer .btn--primary') ||
-                    modal.querySelector('button.btn--primary');
+      // Click Done — search globally in case modal DOM shifted
+      var doneBtn = document.querySelector('[data-test="modal-footer"] .btn--primary') ||
+                    document.querySelector('.modal__footer .btn--primary') ||
+                    document.querySelector('.listing-price-suggestion-modal .btn--primary') ||
+                    document.querySelector('[data-test="modal-container"] .btn--primary');
       if (doneBtn) {
         debugLog('poshmark', 'postPrice: clicking Done');
+        doneBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         doneBtn.click();
         await sleep(500);
       } else {
-        debugLog('poshmark', 'postPrice: Done button not found');
+        debugLog('poshmark', 'postPrice: Done button not found — trying close button');
+        var closeBtn = document.querySelector('[data-test="modal-close-btn"]');
+        if (closeBtn) { closeBtn.click(); await sleep(300); }
       }
     },
   },

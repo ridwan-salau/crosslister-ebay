@@ -1,15 +1,8 @@
-// content/ebay.js — eBay scraper with platform-aware "Copy to..." button
+// content/ebay.js — eBay scraper with platform picker dropdown
 
 const BUTTON_ID = 'xlister-ebay-btn';
+const DROPDOWN_ID = 'xlister-dropdown';
 const STATUS_ID = 'xlister-ebay-status';
-
-// Read target platform from storage (defaults to depop)
-let targetPlatform = null;
-
-chrome.storage.local.get(['targetPlatform'], (result) => {
-  targetPlatform = getPlatform(result.targetPlatform || 'depop');
-  injectButton();
-});
 
 function injectButton() {
   if (document.getElementById(BUTTON_ID)) return;
@@ -36,25 +29,70 @@ function injectButton() {
   }
 }
 
+function buildButton(wrapper) {
+  const btn = document.createElement('button');
+  btn.id = BUTTON_ID;
+  btn.innerText = '📦 Cross-list to...';
+  btn.style.cssText = 'background:#333;color:white;padding:10px 16px;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2);transition:transform .1s,box-shadow .1s;';
+  btn.onmouseenter = () => { btn.style.transform = 'scale(1.03)'; btn.style.boxShadow = '0 4px 14px rgba(0,0,0,.3)'; };
+  btn.onmouseleave = () => { btn.style.transform = 'scale(1)'; btn.style.boxShadow = '0 2px 8px rgba(0,0,0,.2)'; };
+  btn.onclick = (e) => { e.stopPropagation(); toggleDropdown(); };
+  wrapper.appendChild(btn);
+  return btn;
+}
+
+function buildDropdown(wrapper) {
+  const dropdown = document.createElement('div');
+  dropdown.id = DROPDOWN_ID;
+  dropdown.style.cssText = 'display:none;position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.15);z-index:99999;overflow:hidden;min-width:180px;';
+  wrapper.style.position = 'relative';
+
+  const platforms = getAllPlatforms();
+  platforms.forEach(p => {
+    const item = document.createElement('div');
+    item.style.cssText = `padding:10px 14px;cursor:pointer;font-size:13px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;align-items:center;gap:8px;transition:background .15s;`;
+    item.innerHTML = `<span style="width:10px;height:10px;border-radius:50%;background:${p.color};flex-shrink:0;"></span><span style="color:#333;font-weight:500;">${p.name}</span>`;
+    item.onmouseenter = () => { item.style.background = '#f5f5f5'; };
+    item.onmouseleave = () => { item.style.background = 'transparent'; };
+    item.onclick = (e) => {
+      e.stopPropagation();
+      hideDropdown();
+      handleCopyClick(p);
+    };
+    dropdown.appendChild(item);
+  });
+
+  wrapper.appendChild(dropdown);
+  return dropdown;
+}
+
+function toggleDropdown() {
+  const dropdown = document.getElementById(DROPDOWN_ID);
+  if (!dropdown) return;
+  dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+}
+
+function hideDropdown() {
+  const dropdown = document.getElementById(DROPDOWN_ID);
+  if (dropdown) dropdown.style.display = 'none';
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#xlister-container')) hideDropdown();
+});
+
 function injectNear(el) {
-  const platform = targetPlatform || getPlatform('depop');
   const wrapper = document.createElement('div');
   wrapper.id = 'xlister-container';
   wrapper.style.cssText = 'margin:12px 0;display:flex;align-items:center;gap:8px;z-index:9999;position:relative;';
 
-  const btn = document.createElement('button');
-  btn.id = BUTTON_ID;
-  btn.innerText = `⚡ Copy to ${platform.name}`;
-  btn.style.cssText = `background:${platform.color};color:white;padding:10px 16px;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,0.2);transition:transform .1s,box-shadow .1s;`;
-  btn.onmouseenter = () => { btn.style.transform = 'scale(1.03)'; btn.style.boxShadow = '0 4px 14px rgba(0,0,0,0.3)'; };
-  btn.onmouseleave = () => { btn.style.transform = 'scale(1)'; btn.style.boxShadow = '0 2px 8px rgba(0,0,0,.2)'; };
-  btn.onclick = handleCopyClick;
+  buildButton(wrapper);
+  buildDropdown(wrapper);
 
   const status = document.createElement('span');
   status.id = STATUS_ID;
   status.style.cssText = 'font-size:13px;color:#555;font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
-
-  wrapper.appendChild(btn);
   wrapper.appendChild(status);
 
   if (el.parentNode) {
@@ -63,34 +101,57 @@ function injectNear(el) {
 }
 
 function injectFloating() {
-  const platform = targetPlatform || getPlatform('depok');
   const wrapper = document.createElement('div');
   wrapper.id = 'xlister-container';
   wrapper.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:999999;display:flex;flex-direction:column;align-items:flex-end;gap:8px;';
 
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'position:relative;';
+
   const btn = document.createElement('button');
   btn.id = BUTTON_ID;
-  btn.innerText = `⚡ Copy to ${platform.name}`;
-  btn.style.cssText = `background:${platform.color};color:white;padding:12px 20px;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:15px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.3);transition:transform .15s;`;
+  btn.innerText = '📦 Cross-list to...';
+  btn.style.cssText = 'background:#333;color:white;padding:12px 20px;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:15px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3);transition:transform .15s;';
   btn.onmouseenter = () => { btn.style.transform = 'scale(1.05)'; };
   btn.onmouseleave = () => { btn.style.transform = 'scale(1)'; };
-  btn.onclick = handleCopyClick;
+  btn.onclick = (e) => { e.stopPropagation(); toggleDropdown(); };
+
+  const dropdown = document.createElement('div');
+  dropdown.id = DROPDOWN_ID;
+  dropdown.style.cssText = 'display:none;position:absolute;bottom:100%;right:0;margin-bottom:4px;background:#fff;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.15);z-index:99999;overflow:hidden;min-width:180px;';
+
+  const platforms = getAllPlatforms();
+  platforms.forEach(p => {
+    const item = document.createElement('div');
+    item.style.cssText = `padding:10px 14px;cursor:pointer;font-size:13px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;align-items:center;gap:8px;transition:background .15s;`;
+    item.innerHTML = `<span style="width:10px;height:10px;border-radius:50%;background:${p.color};flex-shrink:0;"></span><span style="color:#333;font-weight:500;">${p.name}</span>`;
+    item.onmouseenter = () => { item.style.background = '#f5f5f5'; };
+    item.onmouseleave = () => { item.style.background = 'transparent'; };
+    item.onclick = (e) => {
+      e.stopPropagation();
+      hideDropdown();
+      handleCopyClick(p);
+    };
+    dropdown.appendChild(item);
+  });
+
+  btnRow.appendChild(btn);
+  btnRow.appendChild(dropdown);
+  wrapper.appendChild(btnRow);
 
   const status = document.createElement('span');
   status.id = STATUS_ID;
   status.style.cssText = 'font-size:12px;color:#fff;background:rgba(0,0,0,.75);padding:4px 10px;border-radius:4px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
-
-  wrapper.appendChild(btn);
   wrapper.appendChild(status);
   document.body.appendChild(wrapper);
 }
 
-async function handleCopyClick() {
-  const platform = targetPlatform || getPlatform('depop');
+async function handleCopyClick(platform) {
   const btn = document.getElementById(BUTTON_ID);
   const status = document.getElementById(STATUS_ID);
   btn.disabled = true;
   btn.innerText = '⏳ Scraping...';
+  btn.style.background = platform.color;
   status.innerText = '';
 
   try {
@@ -109,7 +170,8 @@ async function handleCopyClick() {
       if (chrome.runtime.lastError || !response || !response.success) {
         status.innerText = 'Error: ' + (chrome.runtime.lastError?.message || 'unknown');
         btn.disabled = false;
-        btn.innerText = `⚡ Copy to ${platform.name}`;
+        btn.innerText = '📦 Cross-list to...';
+        btn.style.background = '#333';
         return;
       }
       status.innerText = `✓ Staged! Opening ${platform.name}...`;
@@ -120,7 +182,8 @@ async function handleCopyClick() {
   } catch (err) {
     status.innerText = 'Error: ' + err.message;
     btn.disabled = false;
-    btn.innerText = `⚡ Copy to ${platform.name}`;
+    btn.innerText = '📦 Cross-list to...';
+    btn.style.background = '#333';
   }
 }
 
@@ -216,7 +279,6 @@ async function fetchDescriptionViaBackground() {
   });
 }
 
-// Init with retry
 function tryInject(retries = 10, interval = 500) {
   injectButton();
   if (!document.getElementById(BUTTON_ID) && retries > 0) {
@@ -230,7 +292,6 @@ if (document.readyState === 'loading') {
   tryInject();
 }
 
-// SPA navigation
 let lastUrl = location.href;
 new MutationObserver(() => {
   if (location.href !== lastUrl) {

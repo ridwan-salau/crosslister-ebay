@@ -114,6 +114,6 @@ const poshmarkConfig = {
     category: { source: 'category', useLeaf: true, fuzzyMatch: true },
     brand:    { source: 'brand', fuzzyMatch: true },
     condition:{ source: 'condition', useMap: 'conditionMap', fuzzyMatch: true },
-    images:   { source: 'images', maxImages: 16 },
+    images:   { source: 'images', maxImages: 16, convertWebP: true },
   },
 };

@@ -44,6 +44,6 @@ const mercariConfig = {
     brand: { source: 'brand', fuzzyMatch: true },
     size: { source: 'size', fuzzyMatch: true, aiBatchable: true },
     condition: { source: 'condition', useMap: 'conditionMap', fuzzyMatch: true },
-    images: { source: 'images', maxImages: 12 },
+    images: { source: 'images', maxImages: 12, convertWebP: true },
   },
 };

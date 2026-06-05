@@ -53,7 +53,7 @@ async function fillForm(platformConfig, item, settings) {
       const maxImages = mapping.maxImages || 8;
       const fileInput = document.querySelector(cfg.selectors.imageUpload.input);
       if (fileInput && value && value.length > 0) {
-        const count = await uploadImages(value, fileInput, maxImages);
+        const count = await uploadImages(value, fileInput, maxImages, mapping.convertWebP);
         if (count > 0) filled++;
       }
       continue;

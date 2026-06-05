@@ -119,6 +119,11 @@ async function fillForm(platformConfig, item, settings) {
       debugLog(cfg.key, 'combobox result ' + fieldName, result);
       if (result.success) {
         filled++;
+        // Post-fill hook for comboboxes (e.g., wait for dependent dropdown)
+        var chook = 'post' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
+        if (cfg.hooks && cfg.hooks[chook]) {
+          try { await cfg.hooks[chook](searchVal, settings); } catch (e) { debugLog(cfg.key, chook + ' hook failed', e); }
+        }
       } else if (mapping.aiBatchable && settings.geminiKey) {
         // Collect for batch AI matching — use click or type variant based on mode
         const options = useClick

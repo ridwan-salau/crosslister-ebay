@@ -13,12 +13,11 @@ const poshmarkConfig = {
       price: '#listing-price-modal-listing-price-input',
     },
     combobox: {
-      // useFullPath matches "Men" in "Clothing > Men > Suits"
       category:  { input: '.listing-editor__category-container .dropdown__selector', menu: '.listing-editor__category-container .dropdown__menu' },
+      subcategory: { input: '.listing-editor__subcategory-container .dropdown__selector', menu: '.listing-editor__subcategory-container .dropdown__menu' },
       condition: { input: '.listing-editor__condition-container .dropdown__selector', menu: '.listing-editor__condition-container .dropdown__menu' },
       size:      { input: '[data-test="size"]', menu: '.listing-editor__dropdown--large' },
       color:     { input: '[data-et-name="color"]', menu: '.dropdown__menu--dark' },
-      // Brand is a typeahead — use type-to-filter mode
       brand:     { input: 'input[placeholder*="Brand"]', menu: '.listing-editor__suggestions-list', mode: 'type' },
     },
     imageUpload: {
@@ -44,8 +43,8 @@ const poshmarkConfig = {
     'fair': 'Fair',
   },
 
-  fieldOrder: ['price', 'title', 'description', 'category', 'size', 'color', 'brand', 'condition', 'images'],
-  categoryDependentFields: ['size'],
+  fieldOrder: ['price', 'title', 'description', 'category', 'subcategory', 'size', 'color', 'brand', 'condition', 'images'],
+  categoryDependentFields: ['subcategory', 'size', 'brand'],
   categoryWaitMs: 0,
 
   hooks: {
@@ -99,6 +98,12 @@ const poshmarkConfig = {
         if (closeBtn) { closeBtn.click(); await sleep(300); }
       }
     },
+
+    // After main category: wait for subcategory dropdown to populate
+    postCategory: async function (value, settings) {
+      await sleep(2000);
+      debugLog('poshmark', 'postCategory: waited for subcategory');
+    },
   },
 
   fieldMapping: {
@@ -106,6 +111,7 @@ const poshmarkConfig = {
     description: { source: 'description', aiTransformable: true },
     price:    { source: 'price', applyBuffer: true, hasHooks: true },
     category: { source: 'category', useLeaf: false, fuzzyMatch: true },
+    subcategory: { source: 'category', useLeaf: true, fuzzyMatch: true },
     size:     { source: 'size', fuzzyMatch: true, aiBatchable: true },
     color:    { source: null }, // Will be set from eBay color if available, or skipped
     brand:    { source: 'brand', fuzzyMatch: true },

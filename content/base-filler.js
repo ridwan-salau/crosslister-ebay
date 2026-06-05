@@ -1,5 +1,16 @@
 // content/base-filler.js — platform-agnostic form-filling engine
 
+// Debug logging — shows in console and as toast when verbose
+var DEBUG_ENABLED = true;
+
+function debugLog(platform, msg, data) {
+  var prefix = '[Crosslister:' + platform + ']';
+  console.log(prefix, msg, data || '');
+  if (data instanceof Error || (data && data.stack)) {
+    console.error(prefix, data);
+  }
+}
+
 async function fillForm(platformConfig, item, settings) {
   const cfg = platformConfig;
   let filled = 0;
@@ -60,23 +71,38 @@ async function fillForm(platformConfig, item, settings) {
         }
         setReactTextarea(el, text);
         filled++;
+        debugLog(cfg.key, 'filled text field', fieldName);
+      } else {
+        debugLog(cfg.key, 'text element not found', { field: fieldName, selector: cfg.selectors.text[fieldName] });
       }
       continue;
     }
 
     if (isInput) {
       // Pre-fill hook (e.g., Poshmark price modal)
-      if (mapping.hasHooks && cfg.hooks && cfg.hooks['pre' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1)]) {
-        value = await cfg.hooks['pre' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1)](value, settings);
+      try {
+        if (mapping.hasHooks && cfg.hooks && cfg.hooks['pre' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1)]) {
+          value = await cfg.hooks['pre' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1)](value, settings);
+        }
+      } catch (e) {
+        debugLog(cfg.key, 'pre' + fieldName + ' hook failed', e);
+        showToast('⚠️ Error preparing ' + fieldName + ' field — see console for details');
       }
       const el = document.querySelector(cfg.selectors.input[fieldName]);
       if (el) {
         setReactValue(el, String(value));
         filled++;
+      } else {
+        debugLog(cfg.key, 'input not found for ' + fieldName, cfg.selectors.input[fieldName]);
       }
       // Post-fill hook (e.g., close modal, fill related fields)
-      if (mapping.hasHooks && cfg.hooks && cfg.hooks['post' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1)]) {
-        await cfg.hooks['post' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1)](value, settings);
+      try {
+        if (mapping.hasHooks && cfg.hooks && cfg.hooks['post' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1)]) {
+          await cfg.hooks['post' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1)](value, settings);
+        }
+      } catch (e) {
+        debugLog(cfg.key, 'post' + fieldName + ' hook failed', e);
+        showToast('⚠️ Error after ' + fieldName + ' field — see console for details');
       }
       continue;
     }
@@ -122,6 +148,7 @@ async function fillForm(platformConfig, item, settings) {
     await sleep(1500);
   }
 
+  debugLog(cfg.key, 'fillForm complete', { filled: filled, unmatched: unmatched.length, fields: cfg.fieldOrder });
   return { filledCount: filled, unmatchedFields: unmatched.length };
 }
 

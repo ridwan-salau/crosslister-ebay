@@ -15,6 +15,7 @@ Thumbs.db
 # Project ephemera
 task.md
 task-v2.md
+sample-out.html
 
 # Chrome extension packed
 *.crx

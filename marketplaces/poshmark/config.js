@@ -19,7 +19,7 @@ const poshmarkConfig = {
       size:      { input: '[data-test="size"]', menu: '.listing-editor__dropdown--large' },
       color:     { input: '[data-et-name="color"]', menu: '.dropdown__menu--dark' },
       // Brand is a typeahead — use type-to-filter mode
-      brand:     { input: '[data-et-name="listingEditorBrandSection"] input', menu: '.listing-editor__suggestions-list', mode: 'type' },
+      brand:     { input: 'input[placeholder*="Brand"]', menu: '.listing-editor__suggestions-list', mode: 'type' },
     },
     imageUpload: {
       input: '#img-file-input',

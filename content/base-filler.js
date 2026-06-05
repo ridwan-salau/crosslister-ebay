@@ -139,14 +139,17 @@ async function fillForm(platformConfig, item, settings) {
 
   // Batch AI match for all unmatched fields
   if (unmatched.length > 0) {
+    debugLog(cfg.key, 'AI batch: sending ' + unmatched.length + ' fields to Gemini', unmatched.map(function(u) { return u.field; }));
     const aiResults = await batchMatchViaBackground(unmatched, cfg.key);
+    debugLog(cfg.key, 'AI batch results', aiResults);
     for (const r of aiResults) {
       const field = unmatched.find(u => u.field === r.field);
       if (field && r.matchedIndex >= 0) {
         var applied = field.useClick
           ? await clickDropdownOption(field.inputSelector, field.menuSelector, r.matchedIndex, cfg.comboboxConfig)
           : await clickComboboxOption(field.inputSelector, field.menuSelector, r.matchedIndex, cfg.comboboxConfig);
-        if (applied) filled++;
+        if (applied) { filled++; debugLog(cfg.key, 'AI applied ' + r.field + ' index ' + r.matchedIndex); }
+        else { debugLog(cfg.key, 'AI failed to apply ' + r.field); }
       }
     }
   }

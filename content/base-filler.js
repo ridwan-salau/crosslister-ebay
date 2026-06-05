@@ -65,10 +65,18 @@ async function fillForm(platformConfig, item, settings) {
     }
 
     if (isInput) {
+      // Pre-fill hook (e.g., Poshmark price modal)
+      if (mapping.hasHooks && cfg.hooks && cfg.hooks['pre' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1)]) {
+        value = await cfg.hooks['pre' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1)](value, settings);
+      }
       const el = document.querySelector(cfg.selectors.input[fieldName]);
       if (el) {
         setReactValue(el, String(value));
         filled++;
+      }
+      // Post-fill hook (e.g., close modal, fill related fields)
+      if (mapping.hasHooks && cfg.hooks && cfg.hooks['post' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1)]) {
+        await cfg.hooks['post' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1)](value, settings);
       }
       continue;
     }

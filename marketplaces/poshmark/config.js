@@ -4,23 +4,18 @@ const poshmarkConfig = {
   key: 'poshmark',
   name: 'Poshmark',
 
-  // Form field DOM selectors
-  // Poshmark uses data-vv-name for form validation, not id/name
   selectors: {
     text: {
       title: '[data-vv-name="title"]',
       description: '[data-vv-name="description"]',
     },
     input: {
-      price: '[data-vv-name="listingPrice"]',
-      originalPrice: '[data-vv-name="originalPrice"]',
+      // Modal price input — main form price is focused to trigger the modal
+      price: '#listing-price-modal-listing-price-input',
     },
     combobox: {
-      // Category is a multi-level dropdown using data-et-name attributes
       category:  { input: '[data-et-prop-location="create_listing"]', menu: '.dropdown__menu' },
-      // Brand is a typeahead autocomplete
-      brand:     { input: '[data-et-name="listingEditorBrandSection"] input, [data-et-name="listingEditorBrandSection"] .type-ahead__input input', menu: '.dropdown__menu' },
-      // Condition is a dropdown with data-et-prop-content values (nwt, nwot, etc.)
+      brand:     { input: '[data-et-name="listingEditorBrandSection"] input', menu: '.dropdown__menu' },
       condition: { input: '[data-et-name="listing_condition"]', menu: '.dropdown__menu' },
     },
     imageUpload: {
@@ -28,17 +23,13 @@ const poshmarkConfig = {
     },
   },
 
-  // Poshmark combobox structure
   comboboxConfig: {
     optionRole: '.dropdown__menu__item, .dropdown__link',
     disabledAttr: 'aria-disabled',
     noOptionsSelector: '',
     sectionHeaderSelector: '',
-    // Options identified by data-et-prop-content or inner text
-    optionTextSelector: '[data-et-prop-content], .dropdown__link',
   },
 
-  // eBay → Poshmark condition mapping
   conditionMap: {
     'new with tags': 'New With Tags',
     'new without tags': 'New Without Tags',
@@ -48,40 +39,54 @@ const poshmarkConfig = {
     'fair': 'Fair',
   },
 
-  // Field fill order (Poshmark has no shipping; size is in style tags)
-  fieldOrder: ['title', 'description', 'price', 'category', 'brand', 'condition', 'images'],
+  // Price first — triggers modal that must be dismissed before other fields
+  fieldOrder: ['price', 'title', 'description', 'category', 'brand', 'condition', 'images'],
   categoryDependentFields: [],
+  categoryWaitMs: 0,
 
-  // How each form field maps to eBay data
+  // Hooks for Poshmark's price suggestion modal
+  hooks: {
+    // Focus main price field → wait for modal → disable Smart Sell
+    prePrice: async function (value, settings) {
+      var mainPrice = document.querySelector('[data-vv-name="listingPrice"]');
+      if (mainPrice) {
+        mainPrice.focus();
+        mainPrice.click();
+        await sleep(1000);
+      }
+      var modal = document.querySelector('[data-test="modal-container"]');
+      if (!modal) return value;
+      var toggleInput = modal.querySelector('[data-test="toggle-input"]');
+      if (toggleInput && toggleInput.checked) {
+        var toggleLabel = modal.querySelector('[data-test="toggle-switch"]');
+        if (toggleLabel) toggleLabel.click();
+        await sleep(300);
+      }
+      return value;
+    },
+
+    // After price: fill original price, click Done to close modal
+    postPrice: async function (value, settings) {
+      var modal = document.querySelector('[data-test="modal-container"]');
+      if (!modal) return;
+      var origPriceInput = document.getElementById('listing-price-modal-original-price-input');
+      if (origPriceInput && settings.priceBuffer > 0) {
+        var orig = (parseFloat(value) / (1 + settings.priceBuffer / 100)).toFixed(2);
+        setReactValue(origPriceInput, orig);
+        await sleep(200);
+      }
+      var doneBtn = modal.querySelector('.btn--primary');
+      if (doneBtn) { doneBtn.click(); await sleep(500); }
+    },
+  },
+
   fieldMapping: {
-    title: {
-      source: 'title',
-    },
-    description: {
-      source: 'description',
-      aiTransformable: true,
-    },
-    price: {
-      source: 'price',
-      applyBuffer: true,
-    },
-    category: {
-      source: 'category',
-      useLeaf: true,
-      fuzzyMatch: true,
-    },
-    brand: {
-      source: 'brand',
-      fuzzyMatch: true,
-    },
-    condition: {
-      source: 'condition',
-      useMap: 'conditionMap',
-      fuzzyMatch: true,
-    },
-    images: {
-      source: 'images',
-      maxImages: 16,
-    },
+    title:    { source: 'title' },
+    description: { source: 'description', aiTransformable: true },
+    price:    { source: 'price', applyBuffer: true, hasHooks: true },
+    category: { source: 'category', useLeaf: true, fuzzyMatch: true },
+    brand:    { source: 'brand', fuzzyMatch: true },
+    condition:{ source: 'condition', useMap: 'conditionMap', fuzzyMatch: true },
+    images:   { source: 'images', maxImages: 16 },
   },
 };

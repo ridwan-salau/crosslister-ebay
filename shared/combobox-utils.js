@@ -43,23 +43,32 @@ async function fillClickDropdown(inputSelector, menuSelector, searchText, config
   var disabledAttr = config.disabledAttr || 'aria-disabled';
 
   // Click the trigger to open the dropdown
-  var trigger = typeof inputSelector === 'string' && inputSelector.startsWith('.') || inputSelector.startsWith('#') || inputSelector.startsWith('[')
+  var trigger = typeof inputSelector === 'string'
     ? document.querySelector(inputSelector)
     : document.getElementById(inputSelector);
-  if (!trigger) return { success: false, reason: 'trigger-not-found' };
+  console.log('[Crosslister] fillClickDropdown trigger:', inputSelector, 'found:', !!trigger);
+  if (!trigger) return { success: false, reason: 'trigger-not-found', selector: inputSelector };
 
   trigger.click();
   await sleep(800);
 
-  var menu = typeof menuSelector === 'string' && (menuSelector.startsWith('.') || menuSelector.startsWith('#') || menuSelector.startsWith('['))
+  var menu = typeof menuSelector === 'string'
     ? document.querySelector(menuSelector)
     : document.getElementById(menuSelector);
-  if (!menu) return { success: false, reason: 'menu-not-found' };
+  console.log('[Crosslister] fillClickDropdown menu:', menuSelector, 'found:', !!menu);
+  if (!menu) {
+    document.body.click();
+    return { success: false, reason: 'menu-not-found', selector: menuSelector };
+  }
 
   var options = Array.from(menu.querySelectorAll(optionRole))
     .filter(function (opt) { return opt.getAttribute(disabledAttr) !== 'true' && opt.innerText.trim(); });
+  console.log('[Crosslister] fillClickDropdown options:', options.length, 'searchText:', searchText);
 
-  if (options.length === 0) return { success: false, reason: 'no-options' };
+  if (options.length === 0) {
+    document.body.click();
+    return { success: false, reason: 'no-options' };
+  }
 
   // Score and pick best
   var bestOption = null, bestScore = 0;

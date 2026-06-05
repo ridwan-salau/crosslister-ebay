@@ -243,9 +243,9 @@ async function fillDepopForm(item) {
     }
   }
 
-  chrome.runtime.sendMessage({ action: 'CONSUME_STAGED' });
+  safeSendMessage({ action: 'CONSUME_STAGED' }, () => {});
 
-  chrome.runtime.sendMessage({
+  safeSendMessage({
     action: 'LOG_LISTING',
     data: { ebayTitle: item.title, ebayId: item.itemId, price: adjustedPrice }
   }, (response) => {
@@ -303,7 +303,7 @@ function removeBanner() {
 // --- Helpers ---
 async function transformDescription(original) {
   return new Promise(resolve => {
-    chrome.runtime.sendMessage(
+    safeSendMessage(
       { action: 'TRANSFORM_DESCRIPTION', description: original },
       (response) => resolve(response?.transformed || original)
     );
@@ -332,7 +332,7 @@ async function uploadImages(imageUrls, fileInput) {
 
 async function fetchImageViaBackground(url) {
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ action: 'FETCH_IMAGE_BLOB', url }, (response) => {
+    safeSendMessage({ action: 'FETCH_IMAGE_BLOB', url }, (response) => {
       if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
       if (response?.dataUrl) {
         const arr = response.dataUrl.split(',');
@@ -386,7 +386,7 @@ async function readComboboxOptions(inputId, menuId) {
 // Use Gemini to pick the best matching option from a list
 async function aiMatchOption(ebayValue, options, field, context) {
   return new Promise(resolve => {
-    chrome.runtime.sendMessage(
+    safeSendMessage(
       { action: 'MATCH_OPTION', ebayValue, options, field, context },
       (response) => resolve(response?.index ?? -1)
     );
@@ -457,7 +457,7 @@ function showSignupModal() {
       errorEl.style.display = 'block';
       return;
     }
-    chrome.runtime.sendMessage(
+    safeSendMessage(
       { action: 'SUBMIT_SIGNUP', data: { name, email } },
       (response) => {
         if (response && response.success) {
@@ -475,13 +475,13 @@ function showSignupModal() {
   };
 
   document.getElementById('xlister-signup-dismiss').onclick = () => {
-    chrome.runtime.sendMessage({ action: 'DISMISS_SIGNUP' });
+    safeSendMessage({ action: 'DISMISS_SIGNUP' }, () => {});
     overlay.remove();
   };
 
   overlay.onclick = (e) => {
     if (e.target === overlay) {
-      chrome.runtime.sendMessage({ action: 'DISMISS_SIGNUP' });
+      safeSendMessage({ action: 'DISMISS_SIGNUP' }, () => {});
       overlay.remove();
     }
   };
@@ -497,12 +497,30 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
+// --- Safe message wrapper (handles extension reload) ---
+function safeSendMessage(msg, cb) {
+  try {
+    chrome.runtime.sendMessage(msg, (response) => {
+      if (chrome.runtime.lastError) {
+        console.warn('[Crosslister] Runtime error:', chrome.runtime.lastError.message);
+        cb(null);
+        return;
+      }
+      cb(response);
+    });
+  } catch (e) {
+    console.warn('[Crosslister] Extension context invalidated — please refresh this page.');
+    showToast('⚠️ Extension was updated. Please refresh this page to continue.');
+    if (cb) cb(null);
+  }
+}
+
 // --- Init ---
 const isCreatePage = /\/products\/create\/|\/sell|\/listing/.test(window.location.href);
 
 if (isCreatePage) {
-  chrome.runtime.sendMessage({ action: 'GET_STAGED_LISTING' }, (response) => {
-    if (chrome.runtime.lastError || !response || !response.item) return;
+  safeSendMessage({ action: 'GET_STAGED_LISTING' }, (response) => {
+    if (!response || !response.item) return;
     showBanner(response.item);
 
     // Auto-fill if form is already visible

@@ -217,10 +217,17 @@ async function fetchDescriptionViaBackground() {
   const descIframe = document.querySelector('#desc_ifr');
   if (!descIframe || !descIframe.src) return null;
   return new Promise(resolve => {
-    chrome.runtime.sendMessage(
-      { action: 'FETCH_TEXT', url: descIframe.src },
-      (response) => resolve(response?.text || null)
-    );
+    try {
+      chrome.runtime.sendMessage(
+        { action: 'FETCH_TEXT', url: descIframe.src },
+        (response) => {
+          if (chrome.runtime.lastError) { resolve(null); return; }
+          resolve(response?.text || null);
+        }
+      );
+    } catch (e) {
+      resolve(null);
+    }
   });
 }
 

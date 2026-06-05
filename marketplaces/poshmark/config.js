@@ -13,12 +13,13 @@ const poshmarkConfig = {
       price: '#listing-price-modal-listing-price-input',
     },
     combobox: {
-      // Click-to-select dropdowns — Poshmark doesn't use type-to-filter
+      // useFullPath matches "Men" in "Clothing > Men > Suits"
       category:  { input: '.listing-editor__category-container .dropdown__selector', menu: '.listing-editor__category-container .dropdown__menu' },
       condition: { input: '.listing-editor__condition-container .dropdown__selector', menu: '.listing-editor__condition-container .dropdown__menu' },
       size:      { input: '[data-test="size"]', menu: '.listing-editor__dropdown--large' },
       color:     { input: '[data-et-name="color"]', menu: '.dropdown__menu--dark' },
-      brand:     { input: '[data-et-name="listingEditorBrandSection"] .dropdown__selector', menu: '.listing-editor__suggestions-list' },
+      // Brand is a typeahead — use type-to-filter mode
+      brand:     { input: '[data-et-name="listingEditorBrandSection"] input', menu: '.listing-editor__suggestions-list', mode: 'type' },
     },
     imageUpload: {
       input: '#img-file-input',

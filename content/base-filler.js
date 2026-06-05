@@ -108,12 +108,14 @@ async function fillForm(platformConfig, item, settings) {
     }
 
     if (isCombobox) {
-      const { input, menu } = cfg.selectors.combobox[fieldName];
-      debugLog(cfg.key, 'combobox ' + fieldName, { value: String(value), input: input, menu: menu });
-      var useClick = cfg.comboboxConfig && cfg.comboboxConfig.mode === 'click';
+      const { input, menu, mode } = cfg.selectors.combobox[fieldName];
+      debugLog(cfg.key, 'combobox ' + fieldName, { value: String(value), input: input, menu: menu, mode: mode });
+      var useClick = (mode === 'click') || (!mode && cfg.comboboxConfig && cfg.comboboxConfig.mode === 'click');
+      // For category matching, use the full path (not just leaf)
+      var searchVal = (fieldName === 'category') ? (item['category'] || String(value)) : String(value);
       var result = useClick
-        ? await fillClickDropdown(input, menu, String(value), cfg.comboboxConfig)
-        : await fillCombobox(input, menu, String(value), cfg.comboboxConfig);
+        ? await fillClickDropdown(input, menu, searchVal, cfg.comboboxConfig)
+        : await fillCombobox(input, menu, searchVal, cfg.comboboxConfig);
       debugLog(cfg.key, 'combobox result ' + fieldName, result);
       if (result.success) {
         filled++;

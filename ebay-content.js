@@ -90,6 +90,12 @@ async function handleCopyClick() {
       throw new Error('Could not read listing title. Make sure you are on an eBay item page (URL contains /itm/).');
     }
 
+    // If description is empty (cross-origin iframe), fetch it via background worker
+    if (!data.description) {
+      status.innerText = 'Fetching description...';
+      data.description = await fetchDescriptionViaBackground() || '';
+    }
+
     status.innerText = 'Sending to background...';
     chrome.runtime.sendMessage({ action: 'STAGE_LISTING', data }, (response) => {
       if (chrome.runtime.lastError) {
@@ -136,18 +142,7 @@ function extractEbayData() {
   }
   const price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
 
-  // Description
-  let description = '';
-  const descFrame = document.querySelector('#desc_ifr');
-  if (descFrame && descFrame.contentDocument) {
-    description = descFrame.contentDocument.body?.innerText?.trim() || '';
-  }
-  if (!description) {
-    const descEl = document.querySelector('#viTabs_0_is2_weather_item_desc_id') ||
-                   document.querySelector('[data-testid="x-item-description"]') ||
-                   document.querySelector('#ds_div');
-    if (descEl) description = descEl.innerText.trim();
-  }
+  // Description — iframe is cross-origin, fetched async via background worker
 
   // Images — prefer data-zoom-src (highest resolution)
   const images = [];
@@ -216,6 +211,17 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => tryInject());
 } else {
   tryInject();
+}
+
+async function fetchDescriptionViaBackground() {
+  const descIframe = document.querySelector('#desc_ifr');
+  if (!descIframe || !descIframe.src) return null;
+  return new Promise(resolve => {
+    chrome.runtime.sendMessage(
+      { action: 'FETCH_TEXT', url: descIframe.src },
+      (response) => resolve(response?.text || null)
+    );
+  });
 }
 
 // Re-inject on SPA navigation

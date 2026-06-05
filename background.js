@@ -60,6 +60,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse({ success: true });
   }
 
+  // --- Fetch page text (for cross-origin iframe content) ---
+  if (request.action === 'FETCH_TEXT') {
+    fetch(request.url)
+      .then(r => r.text())
+      .then(html => {
+        // Extract visible text from the HTML
+        const text = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<[^>]+>/g, '\n')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#?\w+;/g, ' ')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
+        sendResponse({ text });
+      })
+      .catch(err => sendResponse({ error: err.message }));
+    return true; // async
+  }
+
   // --- Image fetching (bypass CORS) ---
   if (request.action === 'FETCH_IMAGE_BLOB') {
     fetch(request.url)

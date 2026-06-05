@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     (result) => {
       if (result.geminiKey) geminiKeyInput.value = result.geminiKey;
       if (result.priceBuffer !== undefined) priceBufferInput.value = result.priceBuffer;
-      else priceBufferInput.value = 10;
+      else priceBufferInput.value = 0;
       if (result.shippingPreference) shippingSelect.value = result.shippingPreference;
       aiToggle.checked = result.aiEnabled === true;
     }

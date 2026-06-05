@@ -68,7 +68,7 @@ const poshmarkConfig = {
       debugLog('poshmark', 'prePrice: waiting for Done button');
       // Wait for Done button to appear
       var start = Date.now();
-      while (Date.now() - start < 3000) {
+      while (Date.now() - start < 1000) {
         var doneBtn = document.querySelector('[data-test="modal-footer"] .btn--primary') ||
                       document.querySelector('.modal__footer .btn--primary');
         if (doneBtn && doneBtn.offsetParent !== null) {

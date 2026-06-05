@@ -90,6 +90,61 @@ async function fillClickDropdown(inputSelector, menuSelector, searchText, config
   return { success: false, reason: 'no-match' };
 }
 
+// Read options from a click dropdown (for AI batch matching)
+async function readClickDropdownOptions(inputSelector, menuSelector, config) {
+  config = config || {};
+  var optionRole = config.optionRole || '.dropdown__menu__item, .dropdown__link';
+  var disabledAttr = config.disabledAttr || 'aria-disabled';
+
+  var trigger = typeof inputSelector === 'string'
+    ? document.querySelector(inputSelector)
+    : document.getElementById(inputSelector);
+  if (!trigger) return [];
+
+  trigger.click();
+  await sleep(800);
+
+  var menu = typeof menuSelector === 'string'
+    ? document.querySelector(menuSelector)
+    : document.getElementById(menuSelector);
+  if (!menu) { document.body.click(); return []; }
+
+  return Array.from(menu.querySelectorAll(optionRole))
+    .filter(function (opt) { return opt.getAttribute(disabledAttr) !== 'true' && opt.innerText.trim(); })
+    .map(function (opt) { return opt.innerText.trim(); })
+    .filter(Boolean);
+}
+
+// Click an option by index in a click dropdown
+async function clickDropdownOption(inputSelector, menuSelector, index, config) {
+  config = config || {};
+  var optionRole = config.optionRole || '.dropdown__menu__item, .dropdown__link';
+  var disabledAttr = config.disabledAttr || 'aria-disabled';
+
+  var trigger = typeof inputSelector === 'string'
+    ? document.querySelector(inputSelector)
+    : document.getElementById(inputSelector);
+  if (!trigger) return false;
+
+  trigger.click();
+  await sleep(800);
+
+  var menu = typeof menuSelector === 'string'
+    ? document.querySelector(menuSelector)
+    : document.getElementById(menuSelector);
+  if (!menu) { document.body.click(); return false; }
+
+  var options = Array.from(menu.querySelectorAll(optionRole))
+    .filter(function (opt) { return opt.getAttribute(disabledAttr) !== 'true' && opt.innerText.trim(); });
+  if (index >= 0 && index < options.length) {
+    options[index].click();
+    await sleep(400);
+    return true;
+  }
+  document.body.click();
+  return false;
+}
+
 // Fill a combobox by typing progressive search terms and picking the best match
 async function fillCombobox(inputId, menuId, searchText, config) {
   config = config || {};

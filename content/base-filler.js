@@ -120,16 +120,15 @@ async function fillForm(platformConfig, item, settings) {
       if (result.success) {
         filled++;
       } else if (mapping.aiBatchable && settings.geminiKey) {
-        // Collect for batch AI matching
-        const options = await readComboboxOptions(input, menu, cfg.comboboxConfig);
+        // Collect for batch AI matching — use click or type variant based on mode
+        const options = useClick
+          ? await readClickDropdownOptions(input, menu, cfg.comboboxConfig)
+          : await readComboboxOptions(input, menu, cfg.comboboxConfig);
         if (options.length > 0) {
           unmatched.push({
-            field: fieldName,
-            sourceValue: String(value),
+            field: fieldName, sourceValue: String(value),
             context: [item.category, item.title].filter(Boolean).join(' — '),
-            options,
-            inputId: input,
-            menuId: menu,
+            options, inputSelector: input, menuSelector: menu, useClick: useClick,
           });
         }
       } else if (mapping.aiBatchable) {
@@ -144,8 +143,10 @@ async function fillForm(platformConfig, item, settings) {
     for (const r of aiResults) {
       const field = unmatched.find(u => u.field === r.field);
       if (field && r.matchedIndex >= 0) {
-        await clickComboboxOption(field.inputId, field.menuId, r.matchedIndex, cfg.comboboxConfig);
-        filled++;
+        var applied = field.useClick
+          ? await clickDropdownOption(field.inputSelector, field.menuSelector, r.matchedIndex, cfg.comboboxConfig)
+          : await clickComboboxOption(field.inputSelector, field.menuSelector, r.matchedIndex, cfg.comboboxConfig);
+        if (applied) filled++;
       }
     }
   }

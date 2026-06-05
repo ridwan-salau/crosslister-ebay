@@ -105,7 +105,7 @@ const poshmarkConfig = {
     title:    { source: 'title' },
     description: { source: 'description', aiTransformable: true },
     price:    { source: 'price', applyBuffer: true, hasHooks: true },
-    category: { source: 'category', useLeaf: true, fuzzyMatch: true },
+    category: { source: 'category', useLeaf: false, fuzzyMatch: true },
     size:     { source: 'size', fuzzyMatch: true, aiBatchable: true },
     color:    { source: null }, // Will be set from eBay color if available, or skipped
     brand:    { source: 'brand', fuzzyMatch: true },

@@ -43,8 +43,8 @@ const poshmarkConfig = {
     'fair': 'Fair',
   },
 
-  fieldOrder: ['price', 'title', 'description', 'category', 'subcategory', 'size', 'color', 'brand', 'condition', 'images'],
-  categoryDependentFields: ['subcategory', 'size', 'brand'],
+  fieldOrder: ['price', 'title', 'description', 'category', 'subcategory', 'size', 'brand', 'condition', 'color', 'images'],
+  categoryDependentFields: [],
   categoryWaitMs: 0,
 
   hooks: {
@@ -99,10 +99,25 @@ const poshmarkConfig = {
       }
     },
 
-    // After main category: wait for subcategory dropdown to populate
+    // After main category: wait for subcategory dropdown to populate (API call)
     postCategory: async function (value, settings) {
+      debugLog('poshmark', 'postCategory: waiting for subcategory to load');
+      // Wait for subcategory dropdown to show options (poll for non-empty)
+      var start = Date.now();
+      while (Date.now() - start < 5000) {
+        var subTrigger = document.querySelector('.listing-editor__subcategory-container .dropdown__selector');
+        if (subTrigger && subTrigger.innerText.trim() !== 'Select Subcategory (optional)') {
+          debugLog('poshmark', 'postCategory: subcategory appears loaded');
+          break;
+        }
+        await sleep(500);
+      }
+    },
+
+    // After subcategory: wait for size/brand/condition to populate
+    postSubcategory: async function (value, settings) {
+      debugLog('poshmark', 'postSubcategory: waiting for dependent fields');
       await sleep(2000);
-      debugLog('poshmark', 'postCategory: waited for subcategory');
     },
   },
 

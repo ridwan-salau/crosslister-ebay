@@ -39,13 +39,14 @@ function setReactTextarea(el, value) {
 // --- eBay → Depop condition mapping ---
 function mapCondition(ebayCondition) {
   if (!ebayCondition) return '';
-  const c = ebayCondition.toLowerCase();
+  // Normalize dashes (en-dash, em-dash → regular hyphen) and collapse whitespace
+  const c = ebayCondition.toLowerCase().replace(/[–—‒―]/g, '-').replace(/\s+/g, ' ').trim();
   if (c.includes('new with tags')) return 'Brand new';
   if (c.includes('new without tags')) return 'Like new';
   if (c.includes('new with imperfections')) return 'Used - Good';
-  if (c.includes('pre-owned') && c.includes('excellent')) return 'Like new';
-  if (c.includes('pre-owned') && c.includes('good')) return 'Used - Good';
-  if (c.includes('pre-owned') && c.includes('fair')) return 'Used - Fair';
+  if (c.includes('excellent')) return 'Like new';
+  if (c.includes('good')) return 'Used - Good';
+  if (c.includes('fair')) return 'Used - Fair';
   return '';
 }
 

@@ -19,18 +19,22 @@ async function callGemini(systemPrompt, userPrompt, temperature, maxTokens, resp
     generationConfig: { maxOutputTokens: maxTokens || 400, temperature: temperature ?? 0.7 },
   };
   if (responseSchema) {
-    body.generationConfig.response_mime_type = 'application/json';
-    body.generationConfig.response_schema = responseSchema;
+    body.generationConfig.responseMimeType = 'application/json';
+    body.generationConfig.responseSchema = responseSchema;
   }
 
-  const res = await fetch(`${GEMINI_BASE}?key=${key}`, {
+  const url = `${GEMINI_BASE}?key=${key}`;
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const data = await res.json();
+  console.log('[Crosslister:bg] callGemini response status=' + res.status + ' error=' + (data.error ? data.error.message : 'none') + ' hasCandidates=' + !!(data.candidates && data.candidates.length > 0));
   if (data.error) throw new Error(data.error.message);
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  var text = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '';
+  console.log('[Crosslister:bg] callGemini text length=' + text.length + ' preview=' + text.substring(0, 200));
+  return text;
 }
 
 // Transform an eBay description for a target platform's tone
@@ -68,10 +72,15 @@ async function batchMatch(unmatchedFields, platformName) {
     }
   };
 
+  console.log('[Crosslister:bg] batchMatch sending', unmatchedFields.length, 'fields:', unmatchedFields.map(function(u) { return u.field + '=' + u.sourceValue + '(' + u.options.length + ' opts)'; }));
   const text = await callGemini(systemPrompt, userPrompt, 0.1, 200, schema);
+  console.log('[Crosslister:bg] batchMatch raw response:', text);
   try {
-    return JSON.parse(text);
-  } catch {
+    var result = JSON.parse(text);
+    console.log('[Crosslister:bg] batchMatch parsed:', JSON.stringify(result));
+    return result;
+  } catch (e) {
+    console.log('[Crosslister:bg] batchMatch parse error:', e.message);
     return [];
   }
 }

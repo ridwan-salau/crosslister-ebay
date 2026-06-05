@@ -65,11 +65,58 @@ async function fillClickDropdown(inputSelector, menuSelector, searchText, config
   }
 
   if (bestOption && bestScore >= 0.15) {
-    // Click the <a> tag or inner clickable element
-    var clickTarget = bestOption.querySelector('a, button') || bestOption;
-    clickTarget.click();
-    await sleep(500);
-    return { success: true, matchedText: bestOption.innerText.trim(), score: bestScore };
+    var matchText = bestOption.innerText.trim();
+    console.log('[Crosslister] matched: tag=' + bestOption.tagName + ' text=' + matchText.slice(0, 30) + ' score=' + bestScore);
+
+    // Re-query from live DOM and click
+    var currentOptions = Array.from(menu.querySelectorAll(optionRole))
+      .filter(function (opt) { return opt.getAttribute(disabledAttr) !== 'true' && opt.innerText.trim(); });
+    for (var oi = 0; oi < currentOptions.length; oi++) {
+      if (currentOptions[oi].innerText.trim() === matchText) {
+        currentOptions[oi].click();
+        break;
+      }
+    }
+
+    await sleep(800);
+
+    // Poshmark category is two-level: after clicking top-level (e.g. "Men"),
+    // the dropdown stays open and shows subcategories. Check for subcategory list.
+    menu = typeof menuSelector === 'string' ? document.querySelector(menuSelector) : document.getElementById(menuSelector);
+    if (menu) {
+      // Look for subcategory options (second <ul> in the menu)
+      var subLists = menu.querySelectorAll('ul');
+      var subOptions = [];
+      for (var si = 1; si < subLists.length; si++) {
+        var items = subLists[si].querySelectorAll(optionRole);
+        for (var sj = 0; sj < items.length; sj++) {
+          if (items[sj].getAttribute(disabledAttr) !== 'true' && items[sj].innerText.trim()) {
+            subOptions.push(items[sj]);
+          }
+        }
+      }
+      if (subOptions.length > 0) {
+        console.log('[Crosslister] found ' + subOptions.length + ' subcategory options');
+        // Score subcategories against the leaf of the search text
+        var leaf = extractLeafCategory(searchText) || searchText;
+        var bestSub = null, bestSubScore = 0;
+        for (var ssi = 0; ssi < subOptions.length; ssi++) {
+          var subText = subOptions[ssi].innerText.trim();
+          var subScore = matchScore(leaf, subText);
+          if (subScore > bestSubScore) { bestSubScore = subScore; bestSub = subOptions[ssi]; }
+        }
+        if (bestSub && bestSubScore >= 0.15) {
+          console.log('[Crosslister] clicking subcategory: ' + bestSub.innerText.trim() + ' score=' + bestSubScore);
+          bestSub.click();
+          await sleep(600);
+        }
+      }
+    }
+
+    var freshTrigger = typeof inputSelector === 'string' ? document.querySelector(inputSelector) : document.getElementById(inputSelector);
+    var freshText = freshTrigger ? (freshTrigger.innerText || '').trim().slice(0, 40) : '';
+    console.log('[Crosslister] final trigger text="' + freshText + '"');
+    return { success: true, matchedText: matchText, score: bestScore };
   }
 
   document.body.click();

@@ -5,9 +5,10 @@ var DEBUG_ENABLED = true;
 
 function debugLog(platform, msg, data) {
   var prefix = '[Crosslister:' + platform + ']';
-  console.log(prefix, msg, data || '');
-  if (data instanceof Error || (data && data.stack)) {
-    console.error(prefix, data);
+  if (data !== undefined) {
+    console.log(prefix + ' ' + msg, JSON.stringify(data));
+  } else {
+    console.log(prefix + ' ' + msg);
   }
 }
 
@@ -15,6 +16,20 @@ async function fillForm(platformConfig, item, settings) {
   const cfg = platformConfig;
   let filled = 0;
   const unmatched = []; // fields to batch-match via AI
+
+  // Dismiss Poshmark error modal before filling starts
+  var errModals = document.querySelectorAll('[data-test="modal-container"]');
+  debugLog(cfg.key, 'checking ' + errModals.length + ' modals for errors');
+  for (var ei = 0; ei < errModals.length; ei++) {
+    var text = errModals[ei].innerText.substring(0, 80);
+    debugLog(cfg.key, 'modal[' + ei + '] text=' + text);
+    if (text.indexOf('Sorry') !== -1 || text.indexOf('Error') !== -1) {
+      var okBtn = errModals[ei].querySelector('.btn--primary');
+      debugLog(cfg.key, 'modal OK button found=' + !!okBtn + ' visible=' + (okBtn ? okBtn.offsetParent !== null : false));
+      if (okBtn && okBtn.offsetParent !== null) { okBtn.click(); debugLog(cfg.key, 'modal OK clicked'); await sleep(800); }
+      else if (okBtn) { okBtn.click(); debugLog(cfg.key, 'modal OK clicked (hidden)'); await sleep(800); }
+    }
+  }
 
   for (const fieldName of cfg.fieldOrder) {
     const mapping = cfg.fieldMapping[fieldName];
@@ -144,9 +159,9 @@ async function fillForm(platformConfig, item, settings) {
 
   // Batch AI match for all unmatched fields
   if (unmatched.length > 0) {
-    debugLog(cfg.key, 'AI batch: sending ' + unmatched.length + ' fields to Gemini', unmatched.map(function(u) { return u.field; }));
+    debugLog(cfg.key, 'AI batch: sending ' + unmatched.length + ' fields', unmatched.map(function(u) { return u.field + '=' + u.sourceValue + '(' + u.options.length + ' opts)'; }));
     const aiResults = await batchMatchViaBackground(unmatched, cfg.key);
-    debugLog(cfg.key, 'AI batch results', aiResults);
+    debugLog(cfg.key, 'AI batch raw results count=' + aiResults.length, aiResults);
     for (const r of aiResults) {
       const field = unmatched.find(u => u.field === r.field);
       if (field && r.matchedIndex >= 0) {
@@ -192,7 +207,12 @@ async function batchMatchViaBackground(fields, platform) {
   return new Promise(resolve => {
     safeSendMessage(
       { action: 'BATCH_MATCH', fields, platform },
-      (response) => resolve(response?.results || [])
+      (response) => {
+        if (response && response.error) {
+          debugLog(platform, 'AI batch error: ' + response.error);
+        }
+        resolve(response?.results || []);
+      }
     );
   });
 }

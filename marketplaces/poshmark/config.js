@@ -14,10 +14,8 @@ const poshmarkConfig = {
     },
     combobox: {
       category:  { input: '.listing-editor__category-container .dropdown__selector', menu: '.listing-editor__category-container .dropdown__menu' },
-      subcategory: { input: '.listing-editor__subcategory-container .dropdown__selector', menu: '.listing-editor__subcategory-container .dropdown__menu' },
       condition: { input: '.listing-editor__condition-container .dropdown__selector', menu: '.listing-editor__condition-container .dropdown__menu' },
       size:      { input: '[data-test="size"]', menu: '.listing-editor__dropdown--large' },
-      color:     { input: '[data-et-name="color"]', menu: '.dropdown__menu--dark' },
       brand:     { input: 'input[placeholder*="Brand"]', menu: '.listing-editor__suggestions-list', mode: 'type' },
     },
     imageUpload: {
@@ -25,10 +23,9 @@ const poshmarkConfig = {
     },
   },
 
-  // Click-to-select mode — Poshmark dropdowns open on click, not typing
   comboboxConfig: {
     mode: 'click',
-    optionRole: '.dropdown__menu__item, .dropdown__link, li',
+    optionRole: '.dropdown__link',
     disabledAttr: 'aria-disabled',
     noOptionsSelector: '',
     sectionHeaderSelector: '',
@@ -43,32 +40,25 @@ const poshmarkConfig = {
     'fair': 'Fair',
   },
 
-  fieldOrder: ['price', 'title', 'description', 'category', 'subcategory', 'size', 'brand', 'condition', 'color', 'images'],
+  fieldOrder: ['price', 'title', 'description', 'category', 'size', 'brand', 'condition', 'images'],
   categoryDependentFields: [],
   categoryWaitMs: 0,
 
   hooks: {
     prePrice: async function (value, settings) {
       var mainPrice = document.querySelector('[data-vv-name="listingPrice"]');
-      if (mainPrice) {
-        mainPrice.focus();
-        mainPrice.click();
-        await sleep(1000);
-      }
+      if (mainPrice) { mainPrice.focus(); mainPrice.click(); await sleep(1000); }
       var modal = document.querySelector('[data-test="modal-container"]');
-      if (!modal) { debugLog('poshmark', 'prePrice: modal not found'); return value; }
+      if (!modal) return value;
       var toggleInput = modal.querySelector('[data-test="toggle-input"]');
       if (toggleInput && toggleInput.checked) {
-        debugLog('poshmark', 'prePrice: disabling Smart Sell');
         var toggleLabel = modal.querySelector('[data-test="toggle-switch"]');
         if (toggleLabel) toggleLabel.click();
         await sleep(500);
       }
-      debugLog('poshmark', 'prePrice: waiting for Done button');
       var start = Date.now();
       while (Date.now() - start < 1000) {
-        var doneBtn = document.querySelector('[data-test="modal-footer"] .btn--primary') ||
-                      document.querySelector('.modal__footer .btn--primary');
+        var doneBtn = document.querySelector('[data-test="modal-footer"] .btn--primary');
         if (doneBtn && doneBtn.offsetParent !== null) break;
         await sleep(200);
       }
@@ -85,39 +75,9 @@ const poshmarkConfig = {
       }
       var doneBtn = document.querySelector('[data-test="modal-footer"] .btn--primary') ||
                     document.querySelector('.modal__footer .btn--primary') ||
-                    document.querySelector('.listing-price-suggestion-modal .btn--primary') ||
-                    document.querySelector('[data-test="modal-container"] .btn--primary');
-      if (doneBtn) {
-        debugLog('poshmark', 'postPrice: clicking Done');
-        doneBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        doneBtn.click();
-        await sleep(500);
-      } else {
-        debugLog('poshmark', 'postPrice: Done button not found — trying close button');
-        var closeBtn = document.querySelector('[data-test="modal-close-btn"]');
-        if (closeBtn) { closeBtn.click(); await sleep(300); }
-      }
-    },
-
-    // After main category: wait for subcategory dropdown to populate (API call)
-    postCategory: async function (value, settings) {
-      debugLog('poshmark', 'postCategory: waiting for subcategory to load');
-      // Wait for subcategory dropdown to show options (poll for non-empty)
-      var start = Date.now();
-      while (Date.now() - start < 5000) {
-        var subTrigger = document.querySelector('.listing-editor__subcategory-container .dropdown__selector');
-        if (subTrigger && subTrigger.innerText.trim() !== 'Select Subcategory (optional)') {
-          debugLog('poshmark', 'postCategory: subcategory appears loaded');
-          break;
-        }
-        await sleep(500);
-      }
-    },
-
-    // After subcategory: wait for size/brand/condition to populate
-    postSubcategory: async function (value, settings) {
-      debugLog('poshmark', 'postSubcategory: waiting for dependent fields');
-      await sleep(2000);
+                    document.querySelector('.listing-price-suggestion-modal .btn--primary');
+      if (doneBtn) { doneBtn.click(); await sleep(500); }
+      else { var closeBtn = document.querySelector('[data-test="modal-close-btn"]'); if (closeBtn) closeBtn.click(); }
     },
   },
 
@@ -126,9 +86,7 @@ const poshmarkConfig = {
     description: { source: 'description', aiTransformable: true },
     price:    { source: 'price', applyBuffer: true, hasHooks: true },
     category: { source: 'category', useLeaf: false, fuzzyMatch: true },
-    subcategory: { source: 'category', useLeaf: true, fuzzyMatch: true },
     size:     { source: 'size', fuzzyMatch: true, aiBatchable: true },
-    color:    { source: null }, // Will be set from eBay color if available, or skipped
     brand:    { source: 'brand', fuzzyMatch: true },
     condition:{ source: 'condition', useMap: 'conditionMap', fuzzyMatch: true },
     images:   { source: 'images', maxImages: 16, convertWebP: true },

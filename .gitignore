@@ -17,6 +17,7 @@ task.md
 task-v2.md
 sample-out.html
 poshmark-create-listing.html
+catalog.json
 
 # Chrome extension packed
 *.crx

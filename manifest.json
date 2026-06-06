@@ -90,7 +90,16 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "eBay Cross-Lister"
+    "default_title": "eBay Cross-Lister",
+    "default_icon": {
+      "16": "icon.jpeg",
+      "48": "icon.jpeg",
+      "128": "icon.jpeg"
+    }
   },
-  "icons": {}
+  "icons": {
+    "16": "icon.jpeg",
+    "48": "icon.jpeg",
+    "128": "icon.jpeg"
+  }
 }

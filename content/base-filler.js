@@ -54,7 +54,7 @@ async function fillForm(platformConfig, item, settings) {
     if (mapping.valueMap && mapping.valueMap[value]) {
       value = mapping.valueMap[value];
     }
-    if (mapping.applyBuffer && settings.priceBuffer > 0) {
+    if (mapping.applyBuffer && settings.priceBuffer !== 0) {
       value = (parseFloat(value) * (1 + settings.priceBuffer / 100)).toFixed(2);
     }
 
@@ -70,6 +70,10 @@ async function fillForm(platformConfig, item, settings) {
       if (fileInput && value && value.length > 0) {
         const count = await uploadImages(value, fileInput, maxImages, mapping.convertWebP);
         if (count > 0) filled++;
+        // Post-images hook (e.g., dismiss covershot modal)
+        if (cfg.hooks && cfg.hooks.postImages) {
+          try { await cfg.hooks.postImages(value, settings); } catch (e) { debugLog(cfg.key, 'postImages hook failed', e); }
+        }
       }
       continue;
     }
@@ -123,36 +127,69 @@ async function fillForm(platformConfig, item, settings) {
     }
 
     if (isCombobox) {
-      const { input, menu, mode } = cfg.selectors.combobox[fieldName];
+      const fieldCfg = cfg.selectors.combobox[fieldName];
+      const { input, menu, mode } = fieldCfg;
       debugLog(cfg.key, 'combobox ' + fieldName, { value: String(value), input: input, menu: menu, mode: mode });
+
+      // Merge field-level overrides into comboboxConfig
+      var comboConfig = Object.assign({}, cfg.comboboxConfig || {});
+      if (fieldCfg.optionRole) comboConfig.optionRole = fieldCfg.optionRole;
+      if (fieldCfg.disabledAttr) comboConfig.disabledAttr = fieldCfg.disabledAttr;
+      if (fieldCfg.twoLevel) comboConfig.twoLevel = true;
+
+      // Pre-combobox hook (e.g., select tab / country before reading options)
+      var prehook = 'pre' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
+      if (cfg.hooks && cfg.hooks[prehook]) {
+        try { await cfg.hooks[prehook](value, settings); } catch (e) { debugLog(cfg.key, prehook + ' hook failed', e); }
+      }
+
       var useClick = (mode === 'click') || (!mode && cfg.comboboxConfig && cfg.comboboxConfig.mode === 'click');
       // For category matching, use the full path (not just leaf)
       var searchVal = (fieldName === 'category') ? (item['category'] || String(value)) : String(value);
-      var result = useClick
-        ? await fillClickDropdown(input, menu, searchVal, cfg.comboboxConfig)
-        : await fillCombobox(input, menu, searchVal, cfg.comboboxConfig);
-      debugLog(cfg.key, 'combobox result ' + fieldName, result);
-      if (result.success) {
-        filled++;
-        // Post-fill hook for comboboxes (e.g., wait for dependent dropdown)
-        var chook = 'post' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
-        if (cfg.hooks && cfg.hooks[chook]) {
-          try { await cfg.hooks[chook](searchVal, settings); } catch (e) { debugLog(cfg.key, chook + ' hook failed', e); }
-        }
-      } else if (mapping.aiBatchable && settings.geminiKey) {
-        // Collect for batch AI matching — use click or type variant based on mode
+
+      // When preferAi is on, skip fuzzy matching for AI-batchable fields —
+      // collect all options and batch them in a single LLM call at the end.
+      if (mapping.aiBatchable && settings.preferAi && settings.geminiKey) {
         const options = useClick
-          ? await readClickDropdownOptions(input, menu, cfg.comboboxConfig)
-          : await readComboboxOptions(input, menu, cfg.comboboxConfig);
+          ? await readClickDropdownOptions(input, menu, comboConfig)
+          : await readComboboxOptions(input, menu, comboConfig);
         if (options.length > 0) {
           unmatched.push({
             field: fieldName, sourceValue: String(value),
-            context: [item.category, item.title].filter(Boolean).join(' — '),
+            context: [item.title, item.description, item.itemSpecifics].filter(Boolean).join(' | '),
             options, inputSelector: input, menuSelector: menu, useClick: useClick,
+            optionRole: comboConfig.optionRole, disabledAttr: comboConfig.disabledAttr,
           });
+          debugLog(cfg.key, 'AI prefer: queued ' + fieldName + ' with ' + options.length + ' options');
         }
-      } else if (mapping.aiBatchable) {
-        showToast('⚠️ Size needs manual selection — set a Gemini API key for auto-conversion.');
+      } else {
+        var result = useClick
+          ? await fillClickDropdown(input, menu, searchVal, comboConfig)
+          : await fillCombobox(input, menu, searchVal, comboConfig);
+        debugLog(cfg.key, 'combobox result ' + fieldName, result);
+        if (result.success) {
+          filled++;
+          // Post-fill hook for comboboxes (e.g., wait for dependent dropdown)
+          var chook = 'post' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
+          if (cfg.hooks && cfg.hooks[chook]) {
+            try { await cfg.hooks[chook](searchVal, settings); } catch (e) { debugLog(cfg.key, chook + ' hook failed', e); }
+          }
+        } else if (mapping.aiBatchable && settings.geminiKey) {
+          // Fallback: collect for batch AI matching
+          const options = useClick
+            ? await readClickDropdownOptions(input, menu, comboConfig)
+            : await readComboboxOptions(input, menu, comboConfig);
+          if (options.length > 0) {
+            unmatched.push({
+              field: fieldName, sourceValue: String(value),
+              context: [item.title, item.description, item.itemSpecifics].filter(Boolean).join(' | '),
+              options, inputSelector: input, menuSelector: menu, useClick: useClick,
+              optionRole: comboConfig.optionRole, disabledAttr: comboConfig.disabledAttr,
+            });
+          }
+        } else if (mapping.aiBatchable) {
+          showToast('⚠️ ' + fieldName + ' needs manual selection — set a Gemini API key for matching.');
+        }
       }
     }
   }
@@ -165,11 +202,75 @@ async function fillForm(platformConfig, item, settings) {
     for (const r of aiResults) {
       const field = unmatched.find(u => u.field === r.field);
       if (field && r.matchedIndex >= 0) {
+        var fieldComboConfig = { optionRole: field.optionRole || cfg.comboboxConfig?.optionRole, disabledAttr: field.disabledAttr || cfg.comboboxConfig?.disabledAttr };
         var applied = field.useClick
-          ? await clickDropdownOption(field.inputSelector, field.menuSelector, r.matchedIndex, cfg.comboboxConfig)
-          : await clickComboboxOption(field.inputSelector, field.menuSelector, r.matchedIndex, cfg.comboboxConfig);
+          ? await clickDropdownOption(field.inputSelector, field.menuSelector, r.matchedIndex, fieldComboConfig)
+          : await clickComboboxOption(field.inputSelector, field.menuSelector, r.matchedIndex, fieldComboConfig);
         if (applied) { filled++; debugLog(cfg.key, 'AI applied ' + r.field + ' index ' + r.matchedIndex); }
         else { debugLog(cfg.key, 'AI failed to apply ' + r.field); }
+      }
+    }
+
+    // After applying category from AI, run post-hook and re-collect dependent
+    // fields that now have different options (e.g., size changes based on category).
+    var categoryApplied = unmatched.some(function(u) {
+      return u.field === 'category' && aiResults.some(function(r) { return r.field === 'category' && r.matchedIndex >= 0; });
+    });
+    if (categoryApplied) {
+      var chook = 'postCategory';
+      if (cfg.hooks && cfg.hooks[chook]) {
+        var catVal = item['category'] || '';
+        try { await cfg.hooks[chook](catVal, settings); } catch (e) { debugLog(cfg.key, chook + ' hook failed', e); }
+      }
+      await sleep(cfg.categoryWaitMs || 1500);
+
+      // Re-read options for category-dependent aiBatchable fields
+      var secondPass = [];
+      var depFields = cfg.categoryDependentFields || [];
+      for (var di = 0; di < depFields.length; di++) {
+        var dfName = depFields[di];
+        var dfMapping = cfg.fieldMapping[dfName];
+        if (!dfMapping || !dfMapping.aiBatchable) continue;
+        var dfCfg = cfg.selectors.combobox[dfName];
+        if (!dfCfg) continue;
+        // Skip if already matched by fuzzy (filled count would have incremented)
+        var alreadyFilled = unmatched.some(function(u) { return u.field === dfName; });
+        if (!alreadyFilled) continue; // was matched by first batch
+        var dfComboConfig = Object.assign({}, cfg.comboboxConfig || {});
+        if (dfCfg.optionRole) dfComboConfig.optionRole = dfCfg.optionRole;
+        if (dfCfg.disabledAttr) dfComboConfig.disabledAttr = dfCfg.disabledAttr;
+        var dfUseClick = (dfCfg.mode === 'click') || (!dfCfg.mode && cfg.comboboxConfig && cfg.comboboxConfig.mode === 'click');
+        var dfOptions = dfUseClick
+          ? await readClickDropdownOptions(dfCfg.input, dfCfg.menu, dfComboConfig)
+          : await readComboboxOptions(dfCfg.input, dfCfg.menu, dfComboConfig);
+        if (dfOptions.length > 0) {
+          var dfSourceVal = item[dfMapping.source] || '';
+          if (!dfSourceVal && dfMapping.fromSetting) dfSourceVal = settings[dfMapping.fromSetting] || '';
+          if (dfSourceVal) {
+            secondPass.push({
+              field: dfName, sourceValue: String(dfSourceVal),
+              context: [item.title, item.description, item.itemSpecifics].filter(Boolean).join(' | '),
+              options: dfOptions, inputSelector: dfCfg.input, menuSelector: dfCfg.menu,
+              useClick: dfUseClick, optionRole: dfComboConfig.optionRole, disabledAttr: dfComboConfig.disabledAttr,
+            });
+            debugLog(cfg.key, 'AI second pass: re-reading ' + dfName + ' with ' + dfOptions.length + ' options');
+          }
+        }
+      }
+      if (secondPass.length > 0) {
+        debugLog(cfg.key, 'AI second batch: sending ' + secondPass.length + ' fields');
+        var aiResults2 = await batchMatchViaBackground(secondPass, cfg.key);
+        for (var ri = 0; ri < aiResults2.length; ri++) {
+          var r2 = aiResults2[ri];
+          var f2 = secondPass.find(function(u) { return u.field === r2.field; });
+          if (f2 && r2.matchedIndex >= 0) {
+            var fc2 = { optionRole: f2.optionRole || cfg.comboboxConfig?.optionRole, disabledAttr: f2.disabledAttr || cfg.comboboxConfig?.disabledAttr };
+            var app2 = f2.useClick
+              ? await clickDropdownOption(f2.inputSelector, f2.menuSelector, r2.matchedIndex, fc2)
+              : await clickComboboxOption(f2.inputSelector, f2.menuSelector, r2.matchedIndex, fc2);
+            if (app2) { filled++; debugLog(cfg.key, 'AI second pass applied ' + r2.field + ' index ' + r2.matchedIndex); }
+          }
+        }
       }
     }
   }

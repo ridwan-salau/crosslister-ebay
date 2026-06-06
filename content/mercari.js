@@ -16,8 +16,11 @@
     bannerObj.el.onclick = async () => {
       bannerObj.update('⏳ Filling form...');
       const settings = await new Promise(r => {
-        chrome.storage.local.get(['priceBuffer', 'aiEnabled', 'geminiKey'], r);
+        chrome.storage.local.get(['platformSettings', 'aiEnabled', 'geminiKey', 'geminiModel'], r);
       });
+      var ps = (settings.platformSettings && settings.platformSettings.mercari) || {};
+      settings.priceBuffer = ps.priceBuffer ?? 0;
+      settings.preferAi = ps.preferAi !== undefined ? !!ps.preferAi : true;
       const result = await fillForm(mercariConfig, response.item, settings);
       safeSendMessage({ action: 'CONSUME_STAGED' }, () => {});
       bannerObj.update(`✓ Done! ${result.filledCount} fields filled.`);

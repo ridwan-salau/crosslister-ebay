@@ -17,7 +17,7 @@ const depopConfig = {
       brand:     { input: 'brand-input', menu: 'brand-menu' },
       size:      { input: 'variants-input', menu: 'variants-menu' },
       condition: { input: 'condition-input', menu: 'condition-menu' },
-      shipping:  { input: 'shippingMethods-input', menu: 'shippingMethods-menu' },
+      shipping:  { input: 'shippingMethods-input', menu: 'shippingMethods-menu', mode: 'click', optionRole: '[role="option"]' },
     },
     imageUpload: {
       input: '#upload-input__input',
@@ -37,8 +37,11 @@ const depopConfig = {
     'new with tags': 'Brand new',
     'new without tags': 'Like new',
     'new with imperfections': 'Used - Good',
-    'excellent': 'Like new',
+    'pre-owned - excellent': 'Used - Excellent',
+    'excellent': 'Used - Excellent',
+    'pre-owned - good': 'Used - Good',
     'good': 'Used - Good',
+    'pre-owned - fair': 'Used - Fair',
     'fair': 'Used - Fair',
   },
 
@@ -61,6 +64,7 @@ const depopConfig = {
       source: 'category',
       useLeaf: true,
       fuzzyMatch: true,
+      aiBatchable: true,
     },
     brand: {
       source: 'brand',
@@ -80,8 +84,12 @@ const depopConfig = {
       source: null,
       fromSetting: 'shippingPreference',
       valueMap: {
-        small: 'Small', medium: 'Medium', large: 'Large',
-        xl: 'Extra Large', free: 'Free', manual: 'Arrange'
+        xxs: 'Extra extra small',
+        xs: 'Extra small',
+        small: 'Small',
+        medium: 'Medium',
+        large: 'Large',
+        xl: 'Extra large',
       },
     },
     images: {

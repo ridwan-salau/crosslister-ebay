@@ -1,59 +1,129 @@
-# eBay → Depop Crosslister
+# eBay Cross-Lister
 
-A Chrome extension that copies eBay listing data into Depop's listing form with one click.
+Chrome extension to cross-list eBay listings to Depop, Poshmark, and Mercari with one click.
 
 ## Features
 
-- **One-click scrape** — extracts title, price, description, images, category, brand, condition, size, and shipping from any eBay listing page
-- **Smart field matching** — fuzzy-matches eBay values to Depop's autocomplete options for category, brand, and condition
-- **Image transfer** — downloads eBay photos and uploads them to Depop's form automatically
-- **Price buffer** — optionally add a percentage markup on Depop to offset fee differences
-- **AI description rewrite** — optionally use Google Gemini to transform technical eBay descriptions into Depop's casual, hashtag-heavy style (disabled by default)
-- **Listing history** — tracks your recent cross-lists in the extension popup
+- Multi-platform: Depop, Poshmark, Mercari (extensible)
+- One-click: scrape eBay → opens target platform → fills the form automatically
+- Multi-select: check multiple platforms and cross-list to all at once
+- Smart field matching: fuzzy text + AI (Gemini) for categories, sizes, colors
+- Image transfer: downloads eBay photos, converts WebP→JPEG where needed
+- Per-platform settings: price buffer (markup or markdown), shipping, address
+- AI description rewrite: Gemini transforms eBay descriptions to platform-appropriate tone
+- Listing history in the popup
 
-## Installation
+## Installation (Development)
 
-1. Download or clone this repository
-2. Open Chrome and go to `chrome://extensions/`
-3. Toggle **Developer mode** on (top-right switch)
-4. Click **Load unpacked** and select the project folder
-5. The extension icon appears in your toolbar
+1. Clone: `git clone git@github.com:ridwan-salau/crosslister-ebay.git`
+2. Chrome → `chrome://extensions/` → toggle **Developer mode**
+3. **Load unpacked** → select the project directory
+4. No build step — Manifest V3 loads files directly
 
-## Usage
+## Project Structure
 
-1. Navigate to any eBay listing page (`ebay.com/itm/...`)
-2. Click the pink **⚡ Copy to Depop** button that appears near the price
-3. A new Depop tab opens — navigate through Depop's listing steps until you reach the form with description, category, and price fields
-4. Click the red banner at the top of the page to paste everything in
-5. Review the populated fields and click **Continue** on Depop
+```
+├── manifest.json              # Multi-platform content scripts, permissions
+├── background-wrapper.js       # importScripts loader for background modules
+├── popup.html / popup.js       # Settings UI (tabs, per-platform config)
+│
+├── shared/                     # Cross-cutting utilities
+│   ├── message-client.js       # safeSendMessage() wrapper
+│   ├── dom-utils.js            # sleep(), escapeHtml()
+│   ├── react-utils.js          # setReactValue(), setReactTextarea()
+│   ├── combobox-utils.js       # fillClickDropdown(), fillCombobox(),
+│   │                           #   resolveEl(), matchScore(), read/click variants
+│   ├── image-utils.js          # uploadImages(), fetchImageViaBackground(),
+│   │                           #   convertToJpeg(), isWebP()
+│   └── ui-utils.js             # makeBanner(), showToast(), showSignupModal()
+│
+├── background/                 # Service worker
+│   ├── index.js                # Message router
+│   ├── storage.js              # Staging, history, signup state
+│   ├── gemini.js               # Gemini client (callGemini, batchMatch,
+│   │                           #   transformDescription)
+│   └── image-proxy.js          # CORS bypass for image/text fetching
+│
+├── marketplaces/               # Platform definitions (DRY — add new platforms here)
+│   ├── registry.js             # Platform list, URL→key mapping
+│   ├── depop/config.js         # Depop selectors, hooks, field mapping
+│   ├── poshmark/config.js      # Poshmark: two-level click dropdowns, size grid
+│   └── mercari/config.js       # Mercari (stub)
+│
+└── content/                    # Content scripts injected into pages
+    ├── base-filler.js          # Platform-agnostic form engine: fillForm()
+    ├── ebay.js                 # eBay scraper + platform picker UI
+    ├── depop.js                # Depop bootstrap (fillForm + address + submit)
+    ├── poshmark.js             # Poshmark bootstrap (fillForm + Next button)
+    └── mercari.js              # Mercari bootstrap (stub)
+```
 
-## Settings
+## Architecture
 
-Click the extension icon in the toolbar to configure:
+### Data flow
 
-- **Gemini API Key** — needed only if you want AI description rewriting. [Get a free key](https://aistudio.google.com/apikey)
-- **Price Buffer (%)** — markup added to the eBay price on Depop (default: 10%)
-- **Shipping** — preset package size to select on Depop
-- **AI Description Rewrite** — toggle on/off (default: off)
+```
+[eBay page]
+    │  ebay.js scrapes DOM → {title, price, description, images,
+    │    category, condition, brand, size, color, itemSpecifics}
+    ▼
+[background/index.js]  ← STAGE_LISTING
+    │  holds data in memory
+    ▼
+[target platform page]
+    │  GET_STAGED_LISTING → item
+    ▼
+[base-filler.js]  fillForm(config, item, settings)
+    │  iterates fieldOrder, resolves values, runs hooks,
+    │  fuzzy-matches or AI-batches combobox fields
+    ▼
+[platform bootstrap]  post-fill hooks (address, worldwide, submit)
+```
 
-## How it works
+### Combobox strategies
 
-**eBay scraping** — The content script reads the DOM for title, price, description, category breadcrumbs, condition, brand, size, shipping cost, and high-resolution images.
+- **Type-to-filter** (Depop): types into `<input>`, reads `[role="option"]` from dropdown, fuzzy-matches text
+- **Click-to-select** (Poshmark): clicks trigger, reads `.dropdown__link` or custom `optionRole`, clicks best match
+- **Two-level** (Poshmark category): clicks top-level, waits, scores sub-options in second `<ul>`
 
-**Data staging** — The background service worker holds the scraped data in memory until the Depop tab requests it.
+### AI matching (batch)
 
-**Depop form filling** — The content script uses React-compatible value setters (native property descriptors + synthetic events) and fuzzy text matching to select the closest options in Depop's autocomplete dropdowns.
+When `preferAi` is enabled (default) and Gemini key is configured:
 
-**Image transfer** — Images are fetched through the background worker (which bypasses CORS), converted to `File` objects, and attached to Depop's file input via `DataTransfer`.
+1. All `aiBatchable` fields collect dropdown options without fuzzy matching
+2. Single batched Gemini call matches all fields at once using structured output
+3. Category-dependent fields (size, brand) get a second pass after category is set
+4. Context sent to LLM: title + description + full item specifics from eBay
+
+### Key config options per platform
+
+Each `config.js` defines:
+- `selectors` — text/input/combobox/imageUpload DOM targets
+- `comboboxConfig` — optionRole, disabledAttr, twoLevel support
+- `fieldOrder` — order fields are filled (respects dependencies)
+- `fieldMapping` — source → target mapping, fuzzyMatch, aiBatchable, useMap, hooks
+- `hooks` — pre/post hooks for fields (open modals, confirm selections, handle subcategories)
+- `conditionMap` — eBay → platform condition keyword mapping
+
+### Adding a new marketplace
+
+1. Create `marketplaces/<name>/config.js` with selectors, fieldOrder, fieldMapping, hooks
+2. Add to `marketplaces/registry.js`
+3. Create `content/<name>.js` bootstrap (calls fillForm + platform-specific post-fill)
+4. Add content_scripts entry in `manifest.json`
+5. Add tab in `popup.html` + `popup.js`
+
+## Development Notes
+
+- **No build step** — all files are plain JS loaded via manifest `content_scripts`
+- **Content script isolation** — cannot access page JS objects (Vue, React internals). All interaction is via DOM events
+- **React compatibility** — `setReactValue()` uses native property descriptors + synthetic `input`/`change` events
+- **Gemini structured output** — uses `responseMimeType` + `responseSchema` in generationConfig. Model is configurable in popup
+- **Storage keys** — `platformSettings` (per-platform), `geminiKey`, `geminiModel`, `aiEnabled`, `listingHistory`
+- **Staged data** — held in memory (service worker variable), consumed by target tab. Multi-platform re-stages before each `window.open`
 
 ## Privacy
 
-All data stays in your browser. The extension makes no external network requests except:
-- Fetching eBay images (to your Depop tab)
-- Optionally calling the Google Gemini API (only if you configure an API key and enable AI rewriting)
-
-No analytics, no tracking, no third-party servers.
-
-## License
-
-MIT
+All data stays in-browser. External requests only:
+- eBay image CDN (via background proxy for CORS)
+- Google Gemini API (only if key configured)

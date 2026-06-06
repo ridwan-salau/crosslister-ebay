@@ -13,9 +13,10 @@ const poshmarkConfig = {
       price: '#listing-price-modal-listing-price-input',
     },
     combobox: {
-      category:  { input: '.listing-editor__category-container .dropdown__selector', menu: '.listing-editor__category-container .dropdown__menu' },
+      category:  { input: '.listing-editor__category-container .dropdown__selector', menu: '.listing-editor__category-container .dropdown__menu', twoLevel: true },
       condition: { input: '.listing-editor__condition-container .dropdown__selector', menu: '.listing-editor__condition-container .dropdown__menu' },
-      size:      { input: '[data-test="size"]', menu: '.listing-editor__dropdown--large' },
+      size:      { input: '[data-test="size"]', menu: '.listing-editor__dropdown--large', optionRole: 'button.multi-size-selector__button' },
+      color:     { input: '.dropdown:has([data-et-name="color"])', menu: '.dropdown:has([data-et-name="color"]) .dropdown__menu', optionRole: '.listing-editor__tile--color' },
       brand:     { input: 'input[placeholder*="Brand"]', menu: '.listing-editor__suggestions-list', mode: 'type' },
     },
     imageUpload: {
@@ -40,9 +41,9 @@ const poshmarkConfig = {
     'fair': 'Fair',
   },
 
-  fieldOrder: ['price', 'title', 'description', 'category', 'size', 'brand', 'condition', 'images'],
-  categoryDependentFields: [],
-  categoryWaitMs: 0,
+  fieldOrder: ['price', 'title', 'description', 'category', 'size', 'color', 'brand', 'condition', 'images'],
+  categoryDependentFields: ['brand', 'size', 'color'],
+  categoryWaitMs: 1500,
 
   hooks: {
     prePrice: async function (value, settings) {
@@ -79,14 +80,116 @@ const poshmarkConfig = {
       if (doneBtn) { doneBtn.click(); await sleep(500); }
       else { var closeBtn = document.querySelector('[data-test="modal-close-btn"]'); if (closeBtn) closeBtn.click(); }
     },
+
+    postCategory: async function (value, settings) {
+      // Wait for brand input and size dropdown to appear after category is set
+      var deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        var brandInput = document.querySelector('input[placeholder*="Brand"]');
+        var sizeTrigger = document.querySelector('[data-test="size"]');
+        if (brandInput && sizeTrigger) break;
+        await sleep(500);
+      }
+      console.log('[Crosslister:PM] postCategory: waited ' + (5000 - (deadline - Date.now())) + 'ms');
+
+      // Handle subcategory dropdown (appears after category is set)
+      // Find the subcategory dropdown — it's a [data-test="dropdown"] containing "Select Subcategory"
+      var subcatDropdowns = document.querySelectorAll('[data-test="dropdown"].form__text--select');
+      for (var si = 0; si < subcatDropdowns.length; si++) {
+        var trigger = subcatDropdowns[si].querySelector('.dropdown__selector');
+        if (trigger && trigger.innerText.indexOf('Subcategory') !== -1) {
+          trigger.click();
+          await sleep(600);
+          var menu = subcatDropdowns[si].querySelector('.dropdown__menu');
+          if (menu) {
+            var options = Array.from(menu.querySelectorAll('.dropdown__link'))
+              .filter(function (o) { return o.innerText.trim(); });
+            var leaf = extractLeafCategory(value) || '';
+            console.log('[Crosslister:PM] subcategory options:', options.map(function(o) { return o.innerText.trim(); }), 'leaf=' + leaf);
+            var best = null, bestScore = 0;
+            for (var oi = 0; oi < options.length; oi++) {
+              var score = matchScore(leaf, options[oi].innerText.trim());
+              if (score > bestScore) { bestScore = score; best = options[oi]; }
+            }
+            if (best && bestScore >= 0.15) {
+              console.log('[Crosslister:PM] clicking subcategory: ' + best.innerText.trim() + ' score=' + bestScore);
+              // Click the <a> inside the option
+              var link = best.querySelector('a') || best;
+              link.click();
+              await sleep(400);
+            } else if (options.length > 0) {
+              // Click "None" if no match
+              var noneOpt = options.find(function(o) { return o.innerText.trim() === 'None'; });
+              if (noneOpt) { var noneLink = noneOpt.querySelector('a') || noneOpt; noneLink.click(); await sleep(400); }
+            }
+          }
+          break;
+        }
+      }
+    },
+
+    postSize: async function (value, settings) {
+      // Click "Done" button inside the size dropdown to confirm selection
+      await sleep(400);
+      var doneBtn = document.querySelector('.listing-editor__dropdown--large .btn--primary') ||
+                    document.querySelector('[data-et-name="apply"]');
+      if (doneBtn) {
+        console.log('[Crosslister:PM] clicking size Done button');
+        doneBtn.click();
+        await sleep(500);
+      } else {
+        console.log('[Crosslister:PM] size Done button not found');
+      }
+    },
+
+    postColor: async function (value, settings) {
+      // Click "Done" button inside the color dropdown to confirm selection
+      await sleep(400);
+      var doneBtn = document.querySelector('.dropdown:has([data-et-name="color"]) .btn--primary');
+      if (doneBtn) {
+        console.log('[Crosslister:PM] clicking color Done button');
+        doneBtn.click();
+        await sleep(500);
+      } else {
+        console.log('[Crosslister:PM] color Done button not found');
+      }
+    },
+
+    postImages: async function (value, settings) {
+      // After uploading images, Poshmark shows a "Select a Covershot" modal.
+      // The first image is pre-selected with max zoom — set to minimum zoom, then Apply.
+      var deadline = Date.now() + 8000;
+      while (Date.now() < deadline) {
+        var applyBtn = document.querySelector('[data-test="modal-container"].modal--large [data-test="modal-footer"] .btn--primary') ||
+                       document.querySelector('[data-test="modal-container"] [data-et-name="apply"]');
+        if (applyBtn && applyBtn.offsetParent !== null) {
+          // Set zoom slider to minimum
+          var slider = document.querySelector('[data-test="modal-container"] .cr-slider');
+          if (slider) {
+            var nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+            nativeSetter.call(slider, slider.min);
+            slider.dispatchEvent(new Event('input', { bubbles: true }));
+            slider.dispatchEvent(new Event('change', { bubbles: true }));
+            await sleep(300);
+          }
+          console.log('[Crosslister:PM] clicking covershot Apply');
+          applyBtn.click();
+          await sleep(800);
+          return;
+        }
+        await sleep(500);
+      }
+      console.log('[Crosslister:PM] covershot Apply not found after timeout');
+    },
   },
 
   fieldMapping: {
     title:    { source: 'title' },
     description: { source: 'description', aiTransformable: true },
     price:    { source: 'price', applyBuffer: true, hasHooks: true },
-    category: { source: 'category', useLeaf: false, fuzzyMatch: true },
+    category: { source: 'category', useLeaf: false, fuzzyMatch: true, aiBatchable: true },
     size:     { source: 'size', fuzzyMatch: true, aiBatchable: true },
+    color:    { source: 'color', fuzzyMatch: true, aiBatchable: true },
     brand:    { source: 'brand', fuzzyMatch: true },
     condition:{ source: 'condition', useMap: 'conditionMap', fuzzyMatch: true },
     images:   { source: 'images', maxImages: 16, convertWebP: true },

@@ -48,10 +48,20 @@
       if (okBtn) { okBtn.click(); console.log('PM dismissed error modal'); }
     }
 
-    chrome.storage.local.get(['priceBuffer', 'aiEnabled', 'geminiKey'], function (settings) {
+    chrome.storage.local.get(['platformSettings', 'aiEnabled', 'geminiKey', 'geminiModel'], function (settings) {
+      var ps = (settings.platformSettings && settings.platformSettings.poshmark) || {};
+      settings.priceBuffer = ps.priceBuffer ?? 0;
+      settings.preferAi = ps.preferAi !== undefined ? !!ps.preferAi : true;
       console.log('PM got settings, calling fillForm');
       fillForm(poshmarkConfig, item, settings).then(function (result) {
         console.log('PM fillForm done', result);
+        // Click "Next" to submit the listing
+        var nextBtn = document.querySelector('[data-et-name="next"].btn--primary') ||
+                      document.querySelector('button.btn--primary.btn--large.btn--wide');
+        if (nextBtn && nextBtn.innerText.indexOf('Next') !== -1) {
+          console.log('[Crosslister:PM] clicking Next');
+          nextBtn.click();
+        }
         safeSendMessage({ action: 'CONSUME_STAGED' }, function () {});
         safeSendMessage({
           action: 'LOG_LISTING',

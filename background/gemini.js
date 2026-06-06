@@ -1,6 +1,6 @@
 // background/gemini.js — Google Gemini API client
 
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const DEFAULT_MODEL = 'gemini-3.1-flash-lite';
 
 function getKey() {
   return new Promise((resolve, reject) => {
@@ -11,8 +11,21 @@ function getKey() {
   });
 }
 
+function getModel() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['geminiModel'], (result) => {
+      resolve(result.geminiModel || DEFAULT_MODEL);
+    });
+  });
+}
+
+function buildUrl(model) {
+  return 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
+}
+
 async function callGemini(systemPrompt, userPrompt, temperature, maxTokens, responseSchema) {
   const key = await getKey();
+  const model = await getModel();
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents: [{ parts: [{ text: userPrompt }] }],
@@ -23,17 +36,22 @@ async function callGemini(systemPrompt, userPrompt, temperature, maxTokens, resp
     body.generationConfig.responseSchema = responseSchema;
   }
 
-  const url = `${GEMINI_BASE}?key=${key}`;
+  const url = buildUrl(model) + '?key=' + key;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const data = await res.json();
-  console.log('[Crosslister:bg] callGemini response status=' + res.status + ' error=' + (data.error ? data.error.message : 'none') + ' hasCandidates=' + !!(data.candidates && data.candidates.length > 0));
+  const candidate = (data.candidates && data.candidates[0]) || null;
+  const finishReason = candidate ? candidate.finishReason : 'no-candidates';
+  const text = (candidate && candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text) || '';
+  console.log('[Crosslister:bg] callGemini status=' + res.status + ' error=' + (data.error ? data.error.message : 'none') + ' finishReason=' + finishReason + ' textLen=' + text.length);
   if (data.error) throw new Error(data.error.message);
-  var text = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '';
-  console.log('[Crosslister:bg] callGemini text length=' + text.length + ' preview=' + text.substring(0, 200));
+  if (!text && finishReason !== 'STOP') {
+    console.log('[Crosslister:bg] callGemini empty text with finishReason=' + finishReason + ' — may be truncated by maxOutputTokens. Full candidate:', JSON.stringify(candidate).substring(0, 500));
+  }
+  if (text) console.log('[Crosslister:bg] callGemini preview:', text.substring(0, 200));
   return text;
 }
 
@@ -73,8 +91,8 @@ async function batchMatch(unmatchedFields, platformName) {
   };
 
   console.log('[Crosslister:bg] batchMatch sending', unmatchedFields.length, 'fields:', unmatchedFields.map(function(u) { return u.field + '=' + u.sourceValue + '(' + u.options.length + ' opts)'; }));
-  const text = await callGemini(systemPrompt, userPrompt, 0.1, 200, schema);
-  console.log('[Crosslister:bg] batchMatch raw response:', text);
+  const text = await callGemini(systemPrompt, userPrompt, 0, 1000, schema);
+  console.log('[Crosslister:bg] batchMatch raw text:', text);
   try {
     var result = JSON.parse(text);
     console.log('[Crosslister:bg] batchMatch parsed:', JSON.stringify(result));

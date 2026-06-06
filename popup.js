@@ -1,97 +1,170 @@
-// popup.js — settings and history for the extension toolbar popup
+// popup.js — per-platform settings with tabbed UI
 
-document.addEventListener('DOMContentLoaded', () => {
-  const platformRadios = document.querySelectorAll('input[name="platform"]');
-  const geminiKeyInput = document.getElementById('geminiKey');
-  const priceBufferInput = document.getElementById('priceBuffer');
-  const shippingSelect = document.getElementById('shippingPreference');
-  const aiToggle = document.getElementById('aiEnabled');
-  const signupName = document.getElementById('signupName');
-  const signupEmail = document.getElementById('signupEmail');
-  const signupBtn = document.getElementById('signupBtn');
-  const signupStatusEl = document.getElementById('signupStatus');
-  const saveBtn = document.getElementById('saveBtn');
-  const clearBtn = document.getElementById('clearBtn');
-  const statusEl = document.getElementById('status');
-  const historyEl = document.getElementById('history');
+(function () {
+  var PLATFORM_KEYS = ['depop', 'poshmark', 'mercari'];
+  var activeTab = 'depop';
 
-  // Load saved settings
-  chrome.storage.local.get(
-    ['targetPlatform', 'geminiKey', 'priceBuffer', 'shippingPreference', 'aiEnabled'],
-    (result) => {
-      const selected = result.targetPlatform || 'depop';
-      platformRadios.forEach(r => { r.checked = r.value === selected; });
-      if (result.geminiKey) geminiKeyInput.value = result.geminiKey;
-      if (result.priceBuffer !== undefined) priceBufferInput.value = result.priceBuffer;
-      else priceBufferInput.value = 0;
-      if (result.shippingPreference) shippingSelect.value = result.shippingPreference;
-      aiToggle.checked = result.aiEnabled === true;
-    }
-  );
+  // Element refs
+  var tabs = document.querySelectorAll('.tab');
+  var tabPanes = document.querySelectorAll('.tab-content');
+  var geminiKeyInput = document.getElementById('geminiKey');
+  var geminiModelSelect = document.getElementById('geminiModel');
+  var aiToggle = document.getElementById('aiEnabled');
+  var saveBtn = document.getElementById('saveBtn');
+  var clearBtn = document.getElementById('clearBtn');
+  var statusEl = document.getElementById('status');
+  var historyEl = document.getElementById('history');
 
-  // Save platform immediately on change
-  platformRadios.forEach(r => {
-    r.addEventListener('change', () => {
-      if (r.checked) {
-        chrome.storage.local.set({ targetPlatform: r.value });
-      }
+  // Per-platform fields indexed by platform key
+  var platformFields = {
+    depop: {
+      priceBuffer: document.getElementById('depopPriceBuffer'),
+      shipping: document.getElementById('depopShipping'),
+      worldwide: document.getElementById('depopWorldwide'),
+      preferAi: document.getElementById('depopPreferAi'),
+      address: {
+        fullName: document.getElementById('depopAddrName'),
+        address1: document.getElementById('depopAddr1'),
+        address2: document.getElementById('depopAddr2'),
+        city: document.getElementById('depopAddrCity'),
+        state: document.getElementById('depopAddrState'),
+        zip: document.getElementById('depopAddrZip'),
+        phone: document.getElementById('depopAddrPhone'),
+      },
+    },
+    poshmark: {
+      priceBuffer: document.getElementById('poshPriceBuffer'),
+      preferAi: document.getElementById('poshPreferAi'),
+    },
+    mercari: {
+      priceBuffer: document.getElementById('mercariPriceBuffer'),
+      preferAi: document.getElementById('mercariPreferAi'),
+    },
+  };
+
+  // --- Tab switching ---
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      activeTab = tab.dataset.tab;
+      tabs.forEach(function (t) { t.classList.remove('active'); });
+      tab.classList.add('active');
+      tabPanes.forEach(function (tc) {
+        tc.classList.remove('active');
+        tc.style.display = 'none';
+      });
+      var pane = document.getElementById('tab-' + activeTab);
+      if (pane) { pane.classList.add('active'); pane.style.display = 'block'; }
     });
   });
 
-  // Load history
-  loadHistory();
+  // --- Load settings ---
+  chrome.storage.local.get(
+    ['platformSettings', 'geminiKey', 'geminiModel', 'aiEnabled', 'priceBuffer', 'shippingPreference'],
+    function (result) {
+      // Global
+      if (result.geminiKey) geminiKeyInput.value = result.geminiKey;
+      if (result.geminiModel) geminiModelSelect.value = result.geminiModel;
+      aiToggle.checked = result.aiEnabled === true;
 
-  // Save
-  saveBtn.addEventListener('click', () => {
-    const selected = document.querySelector('input[name="platform"]:checked');
-    const settings = {
-      targetPlatform: selected ? selected.value : 'depop',
+      // Per-platform — migrate legacy global settings into platformSettings if needed
+      var ps = result.platformSettings || {};
+      var migrated = false;
+      PLATFORM_KEYS.forEach(function (key) {
+        if (!ps[key]) ps[key] = {};
+        // Migrate global priceBuffer into depop if no platformSettings exist
+        if (!result.platformSettings && key === 'depop' && result.priceBuffer !== undefined && ps[key].priceBuffer === undefined) {
+          ps[key].priceBuffer = result.priceBuffer;
+          migrated = true;
+        }
+        if (!result.platformSettings && key === 'depop' && result.shippingPreference !== undefined && ps[key].shipping === undefined) {
+          ps[key].shipping = result.shippingPreference;
+          migrated = true;
+        }
+        // Populate fields from platformSettings
+        var fields = platformFields[key];
+        if (fields) {
+          if (fields.priceBuffer) fields.priceBuffer.value = ps[key].priceBuffer ?? 0;
+          if (fields.shipping) fields.shipping.value = ps[key].shipping || '';
+          if (fields.worldwide) fields.worldwide.checked = !!ps[key].worldwide;
+          if (fields.preferAi) fields.preferAi.checked = ps[key].preferAi !== undefined ? !!ps[key].preferAi : true;
+          if (fields.address) {
+            var addr = ps[key].address || {};
+            var af = fields.address;
+            Object.keys(af).forEach(function (k) { if (af[k]) af[k].value = addr[k] || ''; });
+          }
+        }
+      });
+      // Save migrated settings back
+      if (migrated) {
+        chrome.storage.local.set({ platformSettings: ps });
+        // Clear legacy keys
+        chrome.storage.local.remove(['priceBuffer', 'shippingPreference']);
+      }
+    }
+  );
+
+  // --- Save ---
+  saveBtn.addEventListener('click', function () {
+    // Collect per-platform settings
+    var ps = {};
+    PLATFORM_KEYS.forEach(function (key) {
+      ps[key] = {};
+      var fields = platformFields[key];
+      if (fields) {
+        if (fields.priceBuffer) ps[key].priceBuffer = parseInt(fields.priceBuffer.value, 10) || 0;
+        if (fields.shipping) ps[key].shipping = fields.shipping.value;
+        if (fields.worldwide) ps[key].worldwide = fields.worldwide.checked;
+        if (fields.preferAi) ps[key].preferAi = fields.preferAi.checked;
+        if (fields.address) {
+          ps[key].address = {};
+          var af = fields.address;
+          Object.keys(af).forEach(function (k) { ps[key].address[k] = af[k].value.trim(); });
+        }
+      }
+    });
+
+    var settings = {
+      platformSettings: ps,
       geminiKey: geminiKeyInput.value.trim(),
-      priceBuffer: parseInt(priceBufferInput.value, 10) || 0,
-      shippingPreference: shippingSelect.value,
+      geminiModel: geminiModelSelect.value,
       aiEnabled: aiToggle.checked,
     };
 
-    chrome.storage.local.set(settings, () => {
+    chrome.storage.local.set(settings, function () {
       if (chrome.runtime.lastError) {
-        showStatus('Error saving: ' + chrome.runtime.lastError.message, 'error');
+        showStatus('Error: ' + chrome.runtime.lastError.message, 'error');
       } else {
         showStatus('Settings saved!', 'success');
       }
     });
   });
 
-  // Clear staged item
-  clearBtn.addEventListener('click', () => {
-    chrome.runtime.sendMessage({ action: 'CLEAR_STAGED' }, (response) => {
-      if (response && response.success) {
-        showStatus('Staged listing cleared.', 'success');
-      }
+  // --- Clear staged ---
+  clearBtn.addEventListener('click', function () {
+    chrome.runtime.sendMessage({ action: 'CLEAR_STAGED' }, function (response) {
+      if (response && response.success) showStatus('Staged listing cleared.', 'success');
     });
   });
+
+  // --- History ---
+  loadHistory();
 
   function showStatus(msg, type) {
     statusEl.innerText = msg;
     statusEl.className = 'status ' + type;
-    setTimeout(() => {
-      statusEl.className = 'status';
-      statusEl.style.display = 'none';
-    }, 3000);
+    setTimeout(function () { statusEl.className = 'status'; statusEl.style.display = 'none'; }, 3000);
   }
 
   function loadHistory() {
-    chrome.runtime.sendMessage({ action: 'GET_HISTORY' }, (response) => {
+    chrome.runtime.sendMessage({ action: 'GET_HISTORY' }, function (response) {
       if (response && response.history && response.history.length > 0) {
-        historyEl.innerHTML = response.history.slice(0, 20).map(item => {
-          const date = new Date(item.timestamp).toLocaleDateString('en-US', {
+        historyEl.innerHTML = response.history.slice(0, 20).map(function (item) {
+          var date = new Date(item.timestamp).toLocaleDateString('en-US', {
             month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
           });
-          return `
-            <div class="history-item">
-              <div class="title">${escapeHtml(item.ebayTitle)}</div>
-              <div class="meta">$${item.price} · ${date} · ${item.status}</div>
-            </div>
-          `;
+          return '<div class="history-item">' +
+            '<div class="title">' + escapeHtml(item.ebayTitle) + '</div>' +
+            '<div class="meta">$' + item.price + ' · ' + date + ' · ' + item.status + '</div></div>';
         }).join('');
       } else {
         historyEl.innerHTML = '<div class="history-empty">No listings yet. Cross-list your first item!</div>';
@@ -99,45 +172,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Signup
-  signupBtn.addEventListener('click', () => {
-    const name = signupName.value.trim();
-    const email = signupEmail.value.trim();
-    if (!email || !email.includes('@')) {
-      showSignupStatus('Enter a valid email address.', 'error');
-      return;
-    }
-    signupBtn.disabled = true;
-    signupBtn.innerText = 'Submitting...';
-    chrome.runtime.sendMessage(
-      { action: 'SUBMIT_SIGNUP', data: { name, email } },
-      (response) => {
-        if (response && response.success) {
-          showSignupStatus('✓ Done — opening form...', 'success');
-          if (response.url) window.open(response.url, '_blank');
-          signupName.value = '';
-          signupEmail.value = '';
-        } else {
-          showSignupStatus('Signup form not configured yet.', 'error');
-        }
-        signupBtn.disabled = false;
-        signupBtn.innerText = 'Get notified of updates';
-      }
-    );
-  });
-
-  function showSignupStatus(msg, type) {
-    signupStatusEl.innerText = msg;
-    signupStatusEl.className = 'status ' + type;
-    setTimeout(() => {
-      signupStatusEl.className = 'status';
-      signupStatusEl.style.display = 'none';
-    }, 3000);
-  }
-
   function escapeHtml(str) {
-    const div = document.createElement('div');
+    var div = document.createElement('div');
     div.appendChild(document.createTextNode(str));
     return div.innerHTML;
   }
-});
+})();

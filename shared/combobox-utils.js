@@ -36,18 +36,18 @@ async function fillClickDropdown(inputSelector, menuSelector, searchText, config
   var optionRole = config.optionRole || '.dropdown__menu__item, .dropdown__link';
   var disabledAttr = config.disabledAttr || 'aria-disabled';
 
-  var trigger = typeof inputSelector === 'string' ? document.querySelector(inputSelector) : document.getElementById(inputSelector);
+  var trigger = resolveEl(inputSelector);
   if (!trigger) return { success: false, reason: 'trigger-not-found' };
 
   trigger.click();
   await sleep(800);
 
-  var menu = typeof menuSelector === 'string' ? document.querySelector(menuSelector) : document.getElementById(menuSelector);
+  var menu = resolveEl(menuSelector);
   if (!menu) {
     // Menu might not exist yet — try clicking trigger again
     trigger.click();
     await sleep(600);
-    menu = typeof menuSelector === 'string' ? document.querySelector(menuSelector) : document.getElementById(menuSelector);
+    menu = resolveEl(menuSelector);
   }
   if (!menu) { document.body.click(); return { success: false, reason: 'menu-not-found' }; }
 
@@ -80,40 +80,41 @@ async function fillClickDropdown(inputSelector, menuSelector, searchText, config
 
     await sleep(800);
 
-    // Poshmark category is two-level: after clicking top-level (e.g. "Men"),
-    // the dropdown stays open and shows subcategories. Check for subcategory list.
-    menu = typeof menuSelector === 'string' ? document.querySelector(menuSelector) : document.getElementById(menuSelector);
-    if (menu) {
-      // Look for subcategory options (second <ul> in the menu)
-      var subLists = menu.querySelectorAll('ul');
-      var subOptions = [];
-      for (var si = 1; si < subLists.length; si++) {
-        var items = subLists[si].querySelectorAll(optionRole);
-        for (var sj = 0; sj < items.length; sj++) {
-          if (items[sj].getAttribute(disabledAttr) !== 'true' && items[sj].innerText.trim()) {
-            subOptions.push(items[sj]);
+    // Two-level dropdown: after clicking a top-level option, the dropdown
+    // stays open and reveals sub-options. Only active when config.twoLevel is set.
+    if (config.twoLevel) {
+      menu = resolveEl(menuSelector);
+      if (menu) {
+        // Look for sub-options in second+ <ul> (skip first nav <ul>)
+        var subLists = menu.querySelectorAll('ul');
+        var subOptions = [];
+        for (var si = 1; si < subLists.length; si++) {
+          var items = subLists[si].querySelectorAll(optionRole);
+          for (var sj = 0; sj < items.length; sj++) {
+            if (items[sj].getAttribute(disabledAttr) !== 'true' && items[sj].innerText.trim()) {
+              subOptions.push(items[sj]);
+            }
           }
         }
-      }
-      if (subOptions.length > 0) {
-        console.log('[Crosslister] found ' + subOptions.length + ' subcategory options');
-        // Score subcategories against the leaf of the search text
-        var leaf = extractLeafCategory(searchText) || searchText;
-        var bestSub = null, bestSubScore = 0;
-        for (var ssi = 0; ssi < subOptions.length; ssi++) {
-          var subText = subOptions[ssi].innerText.trim();
-          var subScore = matchScore(leaf, subText);
-          if (subScore > bestSubScore) { bestSubScore = subScore; bestSub = subOptions[ssi]; }
-        }
-        if (bestSub && bestSubScore >= 0.15) {
-          console.log('[Crosslister] clicking subcategory: ' + bestSub.innerText.trim() + ' score=' + bestSubScore);
-          bestSub.click();
-          await sleep(600);
+        if (subOptions.length > 0) {
+          console.log('[Crosslister] found ' + subOptions.length + ' sub-options');
+          var leaf = extractLeafCategory(searchText) || searchText;
+          var bestSub = null, bestSubScore = 0;
+          for (var ssi = 0; ssi < subOptions.length; ssi++) {
+            var subText = subOptions[ssi].innerText.trim();
+            var subScore = matchScore(leaf, subText);
+            if (subScore > bestSubScore) { bestSubScore = subScore; bestSub = subOptions[ssi]; }
+          }
+          if (bestSub && bestSubScore >= 0.15) {
+            console.log('[Crosslister] clicking sub-option: ' + bestSub.innerText.trim() + ' score=' + bestSubScore);
+            bestSub.click();
+            await sleep(600);
+          }
         }
       }
     }
 
-    var freshTrigger = typeof inputSelector === 'string' ? document.querySelector(inputSelector) : document.getElementById(inputSelector);
+    var freshTrigger = resolveEl(inputSelector);
     var freshText = freshTrigger ? (freshTrigger.innerText || '').trim().slice(0, 40) : '';
     console.log('[Crosslister] final trigger text="' + freshText + '"');
     return { success: true, matchedText: matchText, score: bestScore };
@@ -128,16 +129,18 @@ async function readClickDropdownOptions(inputSelector, menuSelector, config) {
   config = config || {};
   var optionRole = config.optionRole || '.dropdown__menu__item, .dropdown__link';
   var disabledAttr = config.disabledAttr || 'aria-disabled';
-  var trigger = typeof inputSelector === 'string' ? document.querySelector(inputSelector) : document.getElementById(inputSelector);
+  var trigger = resolveEl(inputSelector);
   if (!trigger) return [];
   trigger.click();
   await sleep(800);
-  var menu = typeof menuSelector === 'string' ? document.querySelector(menuSelector) : document.getElementById(menuSelector);
+  var menu = resolveEl(menuSelector);
   if (!menu) { document.body.click(); return []; }
-  return Array.from(menu.querySelectorAll(optionRole))
+  var result = Array.from(menu.querySelectorAll(optionRole))
     .filter(function (opt) { return opt.getAttribute(disabledAttr) !== 'true' && opt.innerText.trim(); })
     .map(function (opt) { return opt.innerText.trim(); })
     .filter(Boolean);
+  document.body.click(); // close dropdown after reading
+  return result;
 }
 
 // Click an option by index in a click-to-select dropdown
@@ -145,11 +148,11 @@ async function clickDropdownOption(inputSelector, menuSelector, index, config) {
   config = config || {};
   var optionRole = config.optionRole || '.dropdown__menu__item, .dropdown__link';
   var disabledAttr = config.disabledAttr || 'aria-disabled';
-  var trigger = typeof inputSelector === 'string' ? document.querySelector(inputSelector) : document.getElementById(inputSelector);
+  var trigger = resolveEl(inputSelector);
   if (!trigger) return false;
   trigger.click();
   await sleep(800);
-  var menu = typeof menuSelector === 'string' ? document.querySelector(menuSelector) : document.getElementById(menuSelector);
+  var menu = resolveEl(menuSelector);
   if (!menu) { document.body.click(); return false; }
   var options = Array.from(menu.querySelectorAll(optionRole))
     .filter(function (opt) { return opt.getAttribute(disabledAttr) !== 'true' && opt.innerText.trim(); });
@@ -164,14 +167,18 @@ async function clickDropdownOption(inputSelector, menuSelector, index, config) {
 }
 
 // --- Type-to-filter combobox (unchanged from original) ---
+function resolveEl(ref) {
+  return (typeof ref === 'string' ? (document.getElementById(ref) || document.querySelector(ref)) : document.getElementById(ref));
+}
+
 async function fillCombobox(inputId, menuId, searchText, config) {
   config = config || {};
   var optionRole = config.optionRole || '[role="option"]';
   var disabledAttr = config.disabledAttr || 'aria-disabled';
   var noOptionsSelector = config.noOptionsSelector || '';
   var sectionHeaderSelector = config.sectionHeaderSelector || '';
-  var input = document.getElementById(inputId);
-  if (!input) return { success: false, reason: 'input-not-found' };
+  var input = resolveEl(inputId);
+  if (!input) return { success: false, reason: 'input-not-found', selector: String(inputId) };
   var simplified = extractLeafCategory(searchText) || searchText;
   var searchTerms = [simplified, simplified.split('&')[0].trim(), simplified.split(' ').slice(0, 2).join(' '), simplified.split(' ')[0]]
     .filter(function (t, i, arr) { return t && t !== arr[i - 1]; });
@@ -182,7 +189,7 @@ async function fillCombobox(inputId, menuId, searchText, config) {
     await sleep(100);
     setReactValue(input, term);
     await sleep(1000);
-    var menu = document.getElementById(menuId);
+    var menu = resolveEl(menuId);
     if (!menu) continue;
     var options = Array.from(menu.querySelectorAll(optionRole))
       .filter(function (opt) { return opt.getAttribute(disabledAttr) !== 'true'; });
@@ -190,6 +197,8 @@ async function fillCombobox(inputId, menuId, searchText, config) {
       if (noOptionsSelector && menu.querySelector(noOptionsSelector)) continue;
       input.click();
       await sleep(500);
+      menu = resolveEl(menuId);
+      if (!menu) continue;
       options = Array.from(menu.querySelectorAll(optionRole))
         .filter(function (opt) { return opt.getAttribute(disabledAttr) !== 'true'; });
       if (options.length === 0) continue;
@@ -207,6 +216,25 @@ async function fillCombobox(inputId, menuId, searchText, config) {
     }
     if (bestOption && bestScore >= 0.2) { bestOption.click(); await sleep(400); return { success: true, matchedText: bestOption.innerText.trim(), score: bestScore }; }
   }
+
+  // No fuzzy match found — look for a fallback option (e.g. "Other", "None", "Not listed")
+  var menu = resolveEl(menuId);
+  if (menu) {
+    var options = Array.from(menu.querySelectorAll(optionRole))
+      .filter(function (opt) { return opt.getAttribute(disabledAttr) !== 'true'; });
+    var fallbackKeywords = ['other', 'none', 'not listed', 'unbranded', 'no brand', 'does not apply', 'n/a', 'unlisted', 'unrecognized'];
+    for (var fi = 0; fi < options.length; fi++) {
+      var ft = (options[fi].innerText || '').trim().toLowerCase();
+      for (var fk = 0; fk < fallbackKeywords.length; fk++) {
+        if (ft === fallbackKeywords[fk] || ft.indexOf(fallbackKeywords[fk]) !== -1) {
+          console.log('[Crosslister] fallback: clicking "' + options[fi].innerText.trim() + '"');
+          options[fi].click();
+          await sleep(400);
+          return { success: true, matchedText: options[fi].innerText.trim(), score: 0, fallback: true };
+        }
+      }
+    }
+  }
   document.body.click();
   return { success: false, reason: 'no-match' };
 }
@@ -215,7 +243,7 @@ async function readComboboxOptions(inputId, menuId, config) {
   config = config || {};
   var optionRole = config.optionRole || '[role="option"]';
   var disabledAttr = config.disabledAttr || 'aria-disabled';
-  var input = document.getElementById(inputId);
+  var input = resolveEl(inputId);
   if (!input) return [];
   input.focus();
   await sleep(100);
@@ -223,25 +251,27 @@ async function readComboboxOptions(inputId, menuId, config) {
   await sleep(300);
   input.click();
   await sleep(1000);
-  var menu = document.getElementById(menuId);
+  var menu = resolveEl(menuId);
   if (!menu) return [];
-  return Array.from(menu.querySelectorAll(optionRole))
+  var result = Array.from(menu.querySelectorAll(optionRole))
     .filter(function (opt) { return opt.getAttribute(disabledAttr) !== 'true'; })
     .map(function (opt) { return opt.innerText.trim(); })
     .filter(Boolean);
+  document.body.click(); // close dropdown after reading
+  return result;
 }
 
 async function clickComboboxOption(inputId, menuId, index, config) {
   config = config || {};
   var optionRole = config.optionRole || '[role="option"]';
   var disabledAttr = config.disabledAttr || 'aria-disabled';
-  var input = document.getElementById(inputId);
+  var input = resolveEl(inputId);
   if (!input) return false;
   input.focus();
   await sleep(200);
   input.click();
   await sleep(800);
-  var menu = document.getElementById(menuId);
+  var menu = resolveEl(menuId);
   if (!menu) return false;
   var options = Array.from(menu.querySelectorAll(optionRole))
     .filter(function (opt) { return opt.getAttribute(disabledAttr) !== 'true'; });

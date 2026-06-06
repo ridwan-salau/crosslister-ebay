@@ -50,17 +50,25 @@ const poshmarkConfig = {
       var mainPrice = document.querySelector('[data-vv-name="listingPrice"]');
       if (mainPrice) { mainPrice.focus(); mainPrice.click(); await sleep(1000); }
       var modal = document.querySelector('[data-test="modal-container"]');
-      if (!modal) return value;
+      if (!modal) { console.log('[Crosslister:PM] prePrice: no price modal found, skipping'); return value; }
       var toggleInput = modal.querySelector('[data-test="toggle-input"]');
-      if (toggleInput && toggleInput.checked) {
-        var toggleLabel = modal.querySelector('[data-test="toggle-switch"]');
-        if (toggleLabel) toggleLabel.click();
-        await sleep(500);
+      if (toggleInput) {
+        if (toggleInput.checked) {
+          var toggleLabel = modal.querySelector('[data-test="toggle-switch"]');
+          if (toggleLabel) { toggleLabel.click(); console.log('[Crosslister:PM] Smart Sell toggled off'); }
+          await sleep(500);
+        }
+      } else {
+        console.log('[Crosslister:PM] Smart Sell toggle not found, skipping');
       }
+      // Wait for Done button (modal may take a moment to fully render)
       var start = Date.now();
-      while (Date.now() - start < 1000) {
+      while (Date.now() - start < 3000) {
         var doneBtn = document.querySelector('[data-test="modal-footer"] .btn--primary');
-        if (doneBtn && doneBtn.offsetParent !== null) break;
+        if (doneBtn && doneBtn.offsetParent !== null) {
+          console.log('[Crosslister:PM] prePrice: Done button found after ' + (Date.now() - start) + 'ms');
+          break;
+        }
         await sleep(200);
       }
       return value;

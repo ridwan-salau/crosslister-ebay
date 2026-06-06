@@ -17,7 +17,7 @@ const depopConfig = {
       brand:     { input: 'brand-input', menu: 'brand-menu' },
       size:      { input: 'variants-input', menu: 'variants-menu' },
       condition: { input: 'condition-input', menu: 'condition-menu' },
-      shipping:  { input: 'shippingMethods-input', menu: 'shippingMethods-menu', mode: 'click', optionRole: '[role="option"]' },
+      shipping:  { input: 'shippingMethods-input', menu: 'shippingMethods-menu' },
     },
     imageUpload: {
       input: '#upload-input__input',

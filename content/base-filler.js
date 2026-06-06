@@ -161,6 +161,26 @@ async function fillForm(platformConfig, item, settings) {
             optionRole: comboConfig.optionRole, disabledAttr: comboConfig.disabledAttr,
           });
           debugLog(cfg.key, 'AI prefer: queued ' + fieldName + ' with ' + options.length + ' options');
+        } else {
+          // Couldn't read options — fall back to fuzzy matching
+          debugLog(cfg.key, 'AI prefer: no options for ' + fieldName + ', falling back to fuzzy');
+          var result = useClick
+            ? await fillClickDropdown(input, menu, searchVal, comboConfig)
+            : await fillCombobox(input, menu, searchVal, comboConfig);
+          debugLog(cfg.key, 'combobox result ' + fieldName, result);
+          if (result.success) {
+            filled++;
+            var chook2 = 'post' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
+            if (cfg.hooks && cfg.hooks[chook2]) {
+              try { await cfg.hooks[chook2](searchVal, settings); } catch (e) { debugLog(cfg.key, chook2 + ' hook failed', e); }
+            }
+          } else if (result.reason === 'no-match') {
+            // Still no match — collect whatever options we have for AI fallback
+            if (options.length === 0) {
+              // Re-read options with a different approach
+              debugLog(cfg.key, 'AI prefer: retrying option read for ' + fieldName);
+            }
+          }
         }
       } else {
         var result = useClick
@@ -196,9 +216,13 @@ async function fillForm(platformConfig, item, settings) {
 
   // Batch AI match for all unmatched fields
   if (unmatched.length > 0) {
-    debugLog(cfg.key, 'AI batch: sending ' + unmatched.length + ' fields', unmatched.map(function(u) { return u.field + '=' + u.sourceValue + '(' + u.options.length + ' opts)'; }));
+    var batchSummary = unmatched.map(function(u) { return u.field + '="' + u.sourceValue + '" (' + u.options.length + ' opts)'; }).join(', ');
+    console.log('[Crosslister:' + cfg.key + '] AI batch sending ' + unmatched.length + ' fields: ' + batchSummary);
+    unmatched.forEach(function(u) {
+      console.log('[Crosslister:' + cfg.key + ']   ' + u.field + ' options: ' + JSON.stringify(u.options.slice(0, 30)));
+    });
     const aiResults = await batchMatchViaBackground(unmatched, cfg.key);
-    debugLog(cfg.key, 'AI batch raw results count=' + aiResults.length, aiResults);
+    console.log('[Crosslister:' + cfg.key + '] AI batch results: ' + JSON.stringify(aiResults));
     for (const r of aiResults) {
       const field = unmatched.find(u => u.field === r.field);
       if (field && r.matchedIndex >= 0) {
@@ -206,8 +230,62 @@ async function fillForm(platformConfig, item, settings) {
         var applied = field.useClick
           ? await clickDropdownOption(field.inputSelector, field.menuSelector, r.matchedIndex, fieldComboConfig)
           : await clickComboboxOption(field.inputSelector, field.menuSelector, r.matchedIndex, fieldComboConfig);
-        if (applied) { filled++; debugLog(cfg.key, 'AI applied ' + r.field + ' index ' + r.matchedIndex); }
-        else { debugLog(cfg.key, 'AI failed to apply ' + r.field); }
+        if (applied) {
+          filled++;
+          debugLog(cfg.key, 'AI applied ' + r.field + ' index ' + r.matchedIndex);
+          // Handle twoLevel sub-option: after clicking top-level, select sub-option
+          if (field.useClick && field.optionRole && field.inputSelector && field.menuSelector) {
+            var fieldCfg = cfg.selectors.combobox[r.field];
+            if (fieldCfg && fieldCfg.twoLevel) {
+              await sleep(800);
+              var subMenu = resolveEl(field.menuSelector);
+              if (subMenu) {
+                var subRole = field.optionRole || '.dropdown__link';
+                var subLists = subMenu.querySelectorAll('ul');
+                var subOptions = [];
+                for (var sxi = 1; sxi < subLists.length; sxi++) {
+                  var items = subLists[sxi].querySelectorAll(subRole);
+                  for (var sxj = 0; sxj < items.length; sxj++) {
+                    if (items[sxj].getAttribute('aria-disabled') !== 'true' && items[sxj].innerText.trim()) {
+                      subOptions.push(items[sxj]);
+                    }
+                  }
+                }
+                if (subOptions.length > 0) {
+                  var leaf = extractLeafCategory(field.sourceValue) || field.sourceValue;
+                  var bestSub = null, bestSubScore = 0;
+                  for (var ssi = 0; ssi < subOptions.length; ssi++) {
+                    var subScore = matchScore(leaf, subOptions[ssi].innerText.trim());
+                    if (subScore > bestSubScore) { bestSubScore = subScore; bestSub = subOptions[ssi]; }
+                  }
+                  if (bestSub && bestSubScore >= 0.15) {
+                    console.log('[Crosslister:' + cfg.key + '] AI twoLevel sub: clicking "' + bestSub.innerText.trim() + '" score=' + bestSubScore);
+                    var subLink = bestSub.querySelector('a') || bestSub;
+                    subLink.click();
+                    await sleep(600);
+                  }
+                }
+              }
+            }
+          }
+        } else { debugLog(cfg.key, 'AI failed to apply ' + r.field); }
+      }
+
+      // Fuzzy fallback: for any unmatched field that AI didn't match, try fuzzy
+      var aiMatchedFields = aiResults.filter(function(r) { return r.matchedIndex >= 0; }).map(function(r) { return r.field; });
+      for (var fi = 0; fi < unmatched.length; fi++) {
+        var uf = unmatched[fi];
+        if (aiMatchedFields.indexOf(uf.field) !== -1) continue; // AI already handled
+        console.log('[Crosslister:' + cfg.key + '] AI missed ' + uf.field + ', falling back to fuzzy');
+        var ufComboConfig = { optionRole: uf.optionRole || cfg.comboboxConfig?.optionRole, disabledAttr: uf.disabledAttr || cfg.comboboxConfig?.disabledAttr };
+        var fbResult = uf.useClick
+          ? await fillClickDropdown(uf.inputSelector, uf.menuSelector, uf.sourceValue, ufComboConfig)
+          : await fillCombobox(uf.inputSelector, uf.menuSelector, uf.sourceValue, ufComboConfig);
+        if (fbResult.success) {
+          filled++;
+          debugLog(cfg.key, 'fuzzy fallback matched ' + uf.field + ': ' + fbResult.matchedText);
+          // TwoLevel handling for fuzzy fallback is already in fillClickDropdown
+        }
       }
     }
 
@@ -233,9 +311,8 @@ async function fillForm(platformConfig, item, settings) {
         if (!dfMapping || !dfMapping.aiBatchable) continue;
         var dfCfg = cfg.selectors.combobox[dfName];
         if (!dfCfg) continue;
-        // Skip if already matched by fuzzy (filled count would have incremented)
-        var alreadyFilled = unmatched.some(function(u) { return u.field === dfName; });
-        if (!alreadyFilled) continue; // was matched by first batch
+        // Re-read this field — options may have changed after category was set
+        if (dfCfg.twoLevel) continue; // twoLevel fields are handled by fillClickDropdown
         var dfComboConfig = Object.assign({}, cfg.comboboxConfig || {});
         if (dfCfg.optionRole) dfComboConfig.optionRole = dfCfg.optionRole;
         if (dfCfg.disabledAttr) dfComboConfig.disabledAttr = dfCfg.disabledAttr;
@@ -258,8 +335,13 @@ async function fillForm(platformConfig, item, settings) {
         }
       }
       if (secondPass.length > 0) {
-        debugLog(cfg.key, 'AI second batch: sending ' + secondPass.length + ' fields');
+        var batch2Summary = secondPass.map(function(u) { return u.field + '="' + u.sourceValue + '" (' + u.options.length + ' opts)'; }).join(', ');
+        console.log('[Crosslister:' + cfg.key + '] AI second batch: ' + batch2Summary);
+        secondPass.forEach(function(u) {
+          console.log('[Crosslister:' + cfg.key + ']   ' + u.field + ' options: ' + JSON.stringify(u.options.slice(0, 30)));
+        });
         var aiResults2 = await batchMatchViaBackground(secondPass, cfg.key);
+        console.log('[Crosslister:' + cfg.key + '] AI second batch results: ' + JSON.stringify(aiResults2));
         for (var ri = 0; ri < aiResults2.length; ri++) {
           var r2 = aiResults2[ri];
           var f2 = secondPass.find(function(u) { return u.field === r2.field; });

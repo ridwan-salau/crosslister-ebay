@@ -42,7 +42,7 @@ const poshmarkConfig = {
   },
 
   fieldOrder: ['price', 'title', 'description', 'category', 'size', 'color', 'brand', 'condition', 'images'],
-  categoryDependentFields: ['brand', 'size', 'color'],
+  categoryDependentFields: ['size', 'color'],
   categoryWaitMs: 1500,
 
   hooks: {
@@ -216,11 +216,11 @@ const poshmarkConfig = {
     title:    { source: 'title' },
     description: { source: 'description', aiTransformable: true },
     price:    { source: 'price', applyBuffer: true, hasHooks: true },
-    category: { source: 'category', useLeaf: false, fuzzyMatch: true, aiBatchable: true },
-    size:     { source: 'size', fuzzyMatch: true, aiBatchable: true },
-    color:    { source: 'color', fuzzyMatch: true, aiBatchable: true },
-    brand:    { source: 'brand', fuzzyMatch: true },
-    condition:{ source: 'condition', useMap: 'conditionMap', fuzzyMatch: true },
+    category: { source: 'category', useLeaf: false, aiBatchable: true },
+    size:     { source: 'size', aiBatchable: true },
+    color:    { source: 'color', aiBatchable: true },
+    brand:    { source: 'brand' },
+    condition:{ source: 'condition', useMap: 'conditionMap' },
     images:   { source: 'images', maxImages: 16, convertWebP: true },
   },
 };

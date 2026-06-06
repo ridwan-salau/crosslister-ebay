@@ -69,10 +69,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === 'SUBMIT_SIGNUP') {
-    if (!SIGNUP_FORM_TEMPLATE) {
-      sendResponse({ error: 'No signup form configured' });
-      return;
-    }
     const url = SIGNUP_FORM_TEMPLATE
       .replace(SIGNUP_NAME_TOKEN, encodeURIComponent(request.data.name || ''))
       .replace(SIGNUP_EMAIL_TOKEN, encodeURIComponent(request.data.email || ''));

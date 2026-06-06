@@ -34,16 +34,16 @@ const mercariConfig = {
   conditionMap: {},
 
   fieldOrder: ['title', 'description', 'price', 'category', 'size', 'brand', 'condition', 'images'],
-  categoryDependentFields: ['brand', 'size'],
+  categoryDependentFields: ['size'],
 
   fieldMapping: {
     title: { source: 'title' },
     description: { source: 'description', prependTitle: false, aiTransformable: true },
     price: { source: 'price', applyBuffer: true },
-    category: { source: 'category', useLeaf: true, fuzzyMatch: true },
-    brand: { source: 'brand', fuzzyMatch: true },
-    size: { source: 'size', fuzzyMatch: true, aiBatchable: true },
-    condition: { source: 'condition', useMap: 'conditionMap', fuzzyMatch: true },
+    category: { source: 'category', useLeaf: true },
+    brand: { source: 'brand' },
+    size: { source: 'size', aiBatchable: true },
+    condition: { source: 'condition', useMap: 'conditionMap' },
     images: { source: 'images', maxImages: 12, convertWebP: true },
   },
 };

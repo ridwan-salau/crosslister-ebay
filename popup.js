@@ -14,6 +14,10 @@
   var clearBtn = document.getElementById('clearBtn');
   var statusEl = document.getElementById('status');
   var historyEl = document.getElementById('history');
+  var signupName = document.getElementById('signupName');
+  var signupEmail = document.getElementById('signupEmail');
+  var signupBtn = document.getElementById('signupBtn');
+  var signupStatusEl = document.getElementById('signupStatus');
 
   // Per-platform fields indexed by platform key
   var platformFields = {
@@ -144,6 +148,35 @@
     chrome.runtime.sendMessage({ action: 'CONSUME_STAGED' }, function (response) {
       if (chrome.runtime.lastError) { showStatus('Error: ' + chrome.runtime.lastError.message, 'error'); return; }
       if (response && response.success) showStatus('Staged listing cleared.', 'success');
+    });
+  });
+
+  // --- Signup ---
+  signupBtn.addEventListener('click', function () {
+    var name = signupName.value.trim();
+    var email = signupEmail.value.trim();
+    if (!email || !email.includes('@')) {
+      signupStatusEl.innerText = 'Enter a valid email address.';
+      signupStatusEl.className = 'status error';
+      setTimeout(function () { signupStatusEl.className = 'status'; signupStatusEl.style.display = 'none'; }, 3000);
+      return;
+    }
+    signupBtn.disabled = true;
+    signupBtn.innerText = 'Submitting...';
+    chrome.runtime.sendMessage({ action: 'SUBMIT_SIGNUP', data: { name: name, email: email } }, function (response) {
+      if (chrome.runtime.lastError) { signupStatusEl.innerText = 'Error: ' + chrome.runtime.lastError.message; signupStatusEl.className = 'status error'; signupBtn.disabled = false; signupBtn.innerText = 'Get notified of updates'; return; }
+      if (response && response.success) {
+        signupStatusEl.innerText = 'Done — opening form...';
+        signupStatusEl.className = 'status success';
+        if (response.url) window.open(response.url, '_blank');
+        signupName.value = '';
+        signupEmail.value = '';
+      } else {
+        signupStatusEl.innerText = 'Signup form not configured yet.';
+        signupStatusEl.className = 'status error';
+      }
+      signupBtn.disabled = false;
+      signupBtn.innerText = 'Get notified of updates';
     });
   });
 

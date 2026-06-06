@@ -47,7 +47,7 @@ const depopConfig = {
 
   // Field fill order (category before brand/size — they depend on it)
   fieldOrder: ['description', 'price', 'category', 'size', 'brand', 'condition', 'shipping', 'images'],
-  categoryDependentFields: ['brand', 'size'],
+  categoryDependentFields: ['size'],
 
   // How each form field maps to eBay data
   fieldMapping: {
@@ -63,22 +63,18 @@ const depopConfig = {
     category: {
       source: 'category',
       useLeaf: true,
-      fuzzyMatch: true,
       aiBatchable: true,
     },
     brand: {
       source: 'brand',
-      fuzzyMatch: true,
     },
     size: {
       source: 'size',
-      fuzzyMatch: true,
       aiBatchable: true,
     },
     condition: {
       source: 'condition',
       useMap: 'conditionMap',
-      fuzzyMatch: true,
     },
     shipping: {
       source: null,

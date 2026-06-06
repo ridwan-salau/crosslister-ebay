@@ -21,39 +21,53 @@
     bannerObj.update(`📦 eBay listing ready: <strong>${escapeHtml(item.title.slice(0, 60))}${item.title.length > 60 ? '…' : ''}</strong> <span style="background:rgba(255,255,255,.2);padding:4px 10px;border-radius:4px;">Click to paste into form</span>`);
     bannerObj.el && (bannerObj.el.onclick = () => doFill(item, bannerObj));
 
-    // Auto-fill if form is already visible
-    setTimeout(() => {
-      const descEl = document.querySelector(depopConfig.selectors.text.description);
-      const priceEl = document.querySelector(depopConfig.selectors.input.price);
-      if (descEl || priceEl) doFill(item, bannerObj);
-    }, 3000);
+    // Retry auto-fill: Depop form renders asynchronously
+    var retries = 0;
+    function tryAutoFill() {
+      var descEl = document.querySelector(depopConfig.selectors.text.description);
+      var priceEl = document.querySelector(depopConfig.selectors.input.price);
+      if (descEl || priceEl) {
+        console.log('DP form ready after ' + (retries * 500) + 'ms');
+        doFill(item, bannerObj);
+      } else if (++retries < 20) {
+        setTimeout(tryAutoFill, 500);
+      } else {
+        console.log('DP form not found after 10s — waiting for manual click');
+      }
+    }
+    tryAutoFill();
   });
 
   async function doFill(item, bannerObj) {
-    bannerObj.update('⏳ Filling form...');
-    const settings = await new Promise(r => {
-      chrome.storage.local.get(['platformSettings', 'aiEnabled', 'geminiKey', 'geminiModel'], r);
-    });
-    var ps = (settings.platformSettings && settings.platformSettings.depop) || {};
-    settings.priceBuffer = ps.priceBuffer ?? 0;
-    settings.shippingPreference = ps.shipping || '';
-    settings.address = ps.address || null;
-    settings.worldwide = !!ps.worldwide;
-    settings.preferAi = ps.preferAi !== undefined ? !!ps.preferAi : true;
-    const result = await fillForm(depopConfig, item, settings);
-    await fillShippingAddress(settings);
-    await applyWorldwideShipping(settings);
-    await clickContinue();
-    safeSendMessage({ action: 'CONSUME_STAGED' }, () => {});
-    safeSendMessage({
-      action: 'LOG_LISTING',
-      data: { ebayTitle: item.title, ebayId: item.itemId, price: item.price }
-    }, (response) => {
-      if (response && response.showSignup) setTimeout(() => showSignupModal(), 2000);
-    });
-    bannerObj.update(`✓ Done! ${result.filledCount} fields filled. Review and publish.`);
-    showToast(`✓ ${result.filledCount} fields pasted — review and publish on Depop.`);
-    setTimeout(() => bannerObj.remove(), 4000);
+    try {
+      bannerObj.update('⏳ Filling form...');
+      const settings = await new Promise(r => {
+        chrome.storage.local.get(['platformSettings', 'aiEnabled', 'geminiKey', 'geminiModel'], r);
+      });
+      var ps = (settings.platformSettings && settings.platformSettings.depop) || {};
+      settings.priceBuffer = ps.priceBuffer ?? 0;
+      settings.shippingPreference = ps.shipping || '';
+      settings.address = ps.address || null;
+      settings.worldwide = !!ps.worldwide;
+      settings.preferAi = ps.preferAi !== undefined ? !!ps.preferAi : true;
+      const result = await fillForm(depopConfig, item, settings);
+      await fillShippingAddress(settings);
+      await applyWorldwideShipping(settings);
+      await clickContinue();
+      safeSendMessage({ action: 'CONSUME_STAGED' }, () => {});
+      safeSendMessage({
+        action: 'LOG_LISTING',
+        data: { ebayTitle: item.title, ebayId: item.itemId, price: item.price }
+      }, (response) => {
+        if (response && response.showSignup) setTimeout(() => showSignupModal(), 2000);
+      });
+      bannerObj.update(`✓ Done! ${result.filledCount} fields filled. Review and publish.`);
+      showToast(`✓ ${result.filledCount} fields pasted — review and publish on Depop.`);
+      setTimeout(() => bannerObj.remove(), 4000);
+    } catch (e) {
+      console.error('[Crosslister:DP] doFill error:', e);
+      bannerObj.setError('Error: ' + e.message);
+    }
   }
 
   async function applyWorldwideShipping(settings) {
@@ -75,11 +89,19 @@
       if (!modal || modal.offsetParent === null) break;
       await sleep(400);
     }
-    // Poll for the Continue button — it may render late or be disabled initially
+    // Poll for the Continue button — it may render late or be disabled initially.
+    // Use querySelectorAll to avoid matching the address modal's submit button.
     deadline = Date.now() + 8000;
     while (Date.now() < deadline) {
-      var btn = document.querySelector('button[type="submit"]');
-      if (btn && btn.innerText.indexOf('Continue') !== -1) {
+      var btn = null;
+      var btns = document.querySelectorAll('button[type="submit"]');
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].innerText.indexOf('Continue') !== -1 && btns[i].offsetParent !== null) {
+          btn = btns[i];
+          break;
+        }
+      }
+      if (btn) {
         if (btn.disabled) {
           console.log('[Crosslister:DP] Continue button disabled, waiting...');
           await sleep(500);

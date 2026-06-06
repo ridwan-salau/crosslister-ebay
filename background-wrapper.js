@@ -1,7 +1,6 @@
 // background-wrapper.js — loads background modules via importScripts
 try {
   importScripts(
-    'marketplaces/registry.js',
     'background/storage.js',
     'background/image-proxy.js',
     'background/gemini.js',

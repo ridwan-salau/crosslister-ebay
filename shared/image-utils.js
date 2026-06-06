@@ -60,7 +60,7 @@ async function uploadImages(imageUrls, fileInput, maxImages, convertWebP) {
       }
       var ext = isWebP(imageUrls[i]) ? 'jpg' : (imageUrls[i].split('.').pop()?.split('?')[0] || 'jpg');
       files.push(new File([blob], 'ebay-' + (files.length + 1) + '.' + ext, { type: blob.type || 'image/jpeg' }));
-    } catch (_) { /* skip failed images */ }
+    } catch (e) { console.warn('[Crosslister] image upload failed: ' + imageUrls[i] + ' - ' + (e && e.message)); }
   }
   if (files.length === 0) return 0;
 

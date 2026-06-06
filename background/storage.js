@@ -39,11 +39,19 @@ function getStaged() {
 
 function setStaged(data) {
   stagedItem = { ...data, stagedAt: Date.now() };
+  // Persist for MV3 service worker safety (workers can be terminated anytime)
+  chrome.storage.local.set({ stagedItem: stagedItem });
 }
 
 function consumeStaged() {
   stagedItem = null;
+  chrome.storage.local.remove('stagedItem');
 }
+
+// Restore staged item on startup (service worker may have been restarted)
+chrome.storage.local.get(['stagedItem'], function (result) {
+  if (result.stagedItem) stagedItem = result.stagedItem;
+});
 
 function logListing(data) {
   listingHistory.unshift({

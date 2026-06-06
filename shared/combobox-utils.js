@@ -31,7 +31,7 @@ function extractLeafCategory(categoryPath) {
 }
 
 function resolveEl(ref) {
-  return (typeof ref === 'string' ? (document.getElementById(ref) || document.querySelector(ref)) : document.getElementById(ref));
+  return document.getElementById(ref) || document.querySelector(ref);
 }
 
 // --- Click-to-select dropdown ---
@@ -70,7 +70,9 @@ async function fillClickDropdown(inputSelector, menuSelector, searchText, config
     var text = options[i].innerText.trim();
     var score = matchScore(searchText, text);
     if (score >= 0.15) allScores.push({ text: text.slice(0, 40), score: Math.round(score * 100) / 100 });
-    if (score > bestScore) { bestScore = score; bestOption = options[i]; }
+    if (score > bestScore || (score === bestScore && bestOption && text.length < bestOption.innerText.trim().length)) {
+      bestScore = score; bestOption = options[i];
+    }
   }
   console.log('[Crosslister] fillClickDropdown: search="' + searchText.slice(0, 50) + '" options=' + options.length + ' topScores=' + JSON.stringify(allScores));
 
@@ -183,12 +185,16 @@ async function fillCombobox(inputId, menuId, searchText, config) {
   var input = resolveEl(inputId);
   if (!input) { console.log('[Crosslister] fillCombobox: input not found ' + inputId); return { success: false, reason: 'input-not-found' }; }
   var simplified = extractLeafCategory(searchText) || searchText;
-  var searchTerms = [simplified, simplified.split('&')[0].trim(), simplified.split(' ').slice(0, 2).join(' '), simplified.split(' ')[0]]
+  // Strip special chars that break combobox search (e.g., "+" → URL-encoded as space)
+  var clean = simplified.replace(/[+]/g, ' ').replace(/\s+/g, ' ').trim();
+  var searchTerms = [simplified, clean, simplified.split('&')[0].trim(), simplified.split(' ').slice(0, 2).join(' '), simplified.split(' ')[0]]
     .filter(function (t, i, arr) { return t && t !== arr[i - 1]; });
   console.log('[Crosslister] fillCombobox: search="' + searchText.slice(0, 50) + '" terms=' + JSON.stringify(searchTerms));
   for (var ti = 0; ti < searchTerms.length; ti++) {
     var term = searchTerms[ti];
     if (!term || term.length < 1) continue;
+    input.click(); // prime the combobox before typing
+    await sleep(200);
     input.focus();
     await sleep(100);
     setReactValue(input, term);
@@ -218,7 +224,10 @@ async function fillCombobox(inputId, menuId, searchText, config) {
       var score = Math.max(matchScore(searchText, text), matchScore(term, text),
         sectionHeader ? matchScore(searchText, sectionHeader + ' > ' + text) : 0);
       if (score >= 0.2) topScores.push({ text: text.slice(0, 40), score: Math.round(score * 100) / 100 });
-      if (score > bestScore) { bestScore = score; bestOption = options[oi]; }
+      // Prefer shorter text on score ties (more precise match)
+      if (score > bestScore || (score === bestScore && bestOption && text.length < bestOption.innerText.trim().length)) {
+        bestScore = score; bestOption = options[oi];
+      }
     }
     console.log('[Crosslister] fillCombobox: term="' + term + '" found=' + options.length + ' topMatches=' + JSON.stringify(topScores));
     if (bestOption && bestScore >= 0.2) {

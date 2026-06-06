@@ -1,8 +1,5 @@
 // marketplaces/registry.js — platform definitions and lookup
 
-// Default platform if none selected
-const DEFAULT_PLATFORM = 'depop';
-
 const PLATFORMS = {
   depop: {
     key: 'depop',
@@ -44,10 +41,6 @@ const PLATFORMS = {
     hostPermissions: ['https://*.mercari.com/*'],
   },
 };
-
-function getPlatform(key) {
-  return PLATFORMS[key] || PLATFORMS[DEFAULT_PLATFORM];
-}
 
 function getPlatformForUrl(url) {
   for (const platform of Object.values(PLATFORMS)) {

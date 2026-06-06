@@ -141,7 +141,8 @@
 
   // --- Clear staged ---
   clearBtn.addEventListener('click', function () {
-    chrome.runtime.sendMessage({ action: 'CLEAR_STAGED' }, function (response) {
+    chrome.runtime.sendMessage({ action: 'CONSUME_STAGED' }, function (response) {
+      if (chrome.runtime.lastError) { showStatus('Error: ' + chrome.runtime.lastError.message, 'error'); return; }
       if (response && response.success) showStatus('Staged listing cleared.', 'success');
     });
   });
@@ -157,6 +158,7 @@
 
   function loadHistory() {
     chrome.runtime.sendMessage({ action: 'GET_HISTORY' }, function (response) {
+      if (chrome.runtime.lastError) { console.warn('loadHistory:', chrome.runtime.lastError.message); return; }
       if (response && response.history && response.history.length > 0) {
         historyEl.innerHTML = response.history.slice(0, 20).map(function (item) {
           var date = new Date(item.timestamp).toLocaleDateString('en-US', {

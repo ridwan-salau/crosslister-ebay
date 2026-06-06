@@ -31,7 +31,7 @@ function extractLeafCategory(categoryPath) {
 }
 
 function resolveEl(ref) {
-  return (typeof ref === 'string' ? (document.getElementById(ref) || document.querySelector(ref)) : document.getElementById(ref));
+  return document.getElementById(ref) || document.querySelector(ref);
 }
 
 // --- Click-to-select dropdown ---

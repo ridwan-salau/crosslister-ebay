@@ -62,11 +62,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse({ history: getHistory() });
   }
 
-  if (request.action === 'CLEAR_STAGED') {
-    consumeStaged();
-    sendResponse({ success: true });
-  }
-
   // --- Signup ---
   if (request.action === 'DISMISS_SIGNUP') {
     dismissSignup();

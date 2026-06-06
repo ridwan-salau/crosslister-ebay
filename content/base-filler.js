@@ -1,8 +1,5 @@
 // content/base-filler.js — platform-agnostic form-filling engine
 
-// Debug logging — shows in console and as toast when verbose
-var DEBUG_ENABLED = true;
-
 function debugLog(platform, msg, data) {
   var prefix = '[Crosslister:' + platform + ']';
   if (data !== undefined) {
@@ -46,7 +43,8 @@ async function fillForm(platformConfig, item, settings) {
 
     // Apply transformations
     if (mapping.useMap && cfg[mapping.useMap]) {
-      value = mapByKeyword(value, cfg[mapping.useMap]);
+      var mapped = mapByKeyword(value, cfg[mapping.useMap]);
+      if (mapped) value = mapped; // keep original if no keyword match
     }
     if (mapping.useLeaf) {
       value = extractLeafCategory(value) || value;
@@ -55,7 +53,8 @@ async function fillForm(platformConfig, item, settings) {
       value = mapping.valueMap[value];
     }
     if (mapping.applyBuffer && settings.priceBuffer !== 0) {
-      value = (parseFloat(value) * (1 + settings.priceBuffer / 100)).toFixed(2);
+      var num = parseFloat(value);
+      if (!isNaN(num)) value = (num * (1 + settings.priceBuffer / 100)).toFixed(2);
     }
 
     // Determine field type from config selectors
@@ -355,11 +354,6 @@ async function fillForm(platformConfig, item, settings) {
         }
       }
     }
-  }
-
-  // If category was filled and there are dependent fields, wait
-  if (cfg.categoryDependentFields && cfg.categoryDependentFields.some(f => cfg.fieldOrder.indexOf(f) > cfg.fieldOrder.indexOf('category'))) {
-    await sleep(1500);
   }
 
   debugLog(cfg.key, 'fillForm complete', { filled: filled, unmatched: unmatched.length, fields: cfg.fieldOrder });

@@ -37,12 +37,18 @@ async function callGemini(systemPrompt, userPrompt, temperature, maxTokens, resp
   }
 
   const url = buildUrl(model) + '?key=' + key;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
+  let res, data;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    data = await res.json();
+  } catch (e) {
+    console.error('[Crosslister:bg] Gemini fetch error:', e.message);
+    throw new Error('Gemini API request failed: ' + e.message);
+  }
   const candidate = (data.candidates && data.candidates[0]) || null;
   const finishReason = candidate ? candidate.finishReason : 'no-candidates';
   const text = (candidate && candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text) || '';

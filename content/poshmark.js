@@ -41,13 +41,6 @@
     console.log('PM doFill start');
     bannerObj.update('⏳ Filling form...');
 
-    // Dismiss error modals
-    var modal = document.querySelector('[data-test="modal-container"]');
-    if (modal && modal.innerText.indexOf('Sorry') !== -1) {
-      var okBtn = modal.querySelector('.btn--primary');
-      if (okBtn) { okBtn.click(); console.log('PM dismissed error modal'); }
-    }
-
     chrome.storage.local.get(['platformSettings', 'aiEnabled', 'geminiKey', 'geminiModel'], function (settings) {
       var ps = (settings.platformSettings && settings.platformSettings.poshmark) || {};
       settings.priceBuffer = ps.priceBuffer ?? 0;

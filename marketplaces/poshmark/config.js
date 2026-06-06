@@ -51,22 +51,34 @@ const poshmarkConfig = {
       if (mainPrice) { mainPrice.focus(); mainPrice.click(); await sleep(1000); }
       var modal = document.querySelector('[data-test="modal-container"]');
       if (!modal) { console.log('[Crosslister:PM] prePrice: no price modal found, skipping'); return value; }
-      var toggleInput = modal.querySelector('[data-test="toggle-input"]');
-      if (toggleInput) {
-        if (toggleInput.checked) {
+
+      // Detect modal variant: new "Add Price" modal vs old Smart Sell modal
+      var listingPriceInput = modal.querySelector('.listing-price-input');
+      var smartSellToggle = modal.querySelector('[data-test="toggle-input"]');
+
+      if (listingPriceInput) {
+        // New variant: "Add Price" modal with suggested prices, no Smart Sell toggle
+        console.log('[Crosslister:PM] prePrice: new variant price modal');
+        // Fill the listing price to enable the Done button
+        setReactValue(listingPriceInput, String(value));
+        await sleep(500);
+      } else if (smartSellToggle) {
+        // Old variant: Smart Sell modal
+        if (smartSellToggle.checked) {
           var toggleLabel = modal.querySelector('[data-test="toggle-switch"]');
           if (toggleLabel) { toggleLabel.click(); console.log('[Crosslister:PM] Smart Sell toggled off'); }
           await sleep(500);
         }
       } else {
-        console.log('[Crosslister:PM] Smart Sell toggle not found, skipping');
+        console.log('[Crosslister:PM] prePrice: unknown modal variant, continuing');
       }
-      // Wait for Done button (modal may take a moment to fully render)
+
+      // Wait for Done button to be enabled (new variant starts disabled until price is filled)
       var start = Date.now();
       while (Date.now() - start < 3000) {
         var doneBtn = document.querySelector('[data-test="modal-footer"] .btn--primary');
-        if (doneBtn && doneBtn.offsetParent !== null) {
-          console.log('[Crosslister:PM] prePrice: Done button found after ' + (Date.now() - start) + 'ms');
+        if (doneBtn && doneBtn.offsetParent !== null && !doneBtn.disabled) {
+          console.log('[Crosslister:PM] prePrice: Done button ready after ' + (Date.now() - start) + 'ms');
           break;
         }
         await sleep(200);
@@ -76,7 +88,16 @@ const poshmarkConfig = {
 
     postPrice: async function (value, settings) {
       await sleep(300);
-      var origPriceInput = document.getElementById('listing-price-modal-original-price-input');
+      var modal = document.querySelector('[data-test="modal-container"]');
+      // Original price: try old ID first, then look for input after "Original Price" label
+      var origPriceInput = document.getElementById('listing-price-modal-original-price-input') ||
+                           (modal && modal.querySelector('.listing-editor__field-description__text + input'));
+      // Fallback: find input in modal body that isn't the listing price input
+      if (!origPriceInput && modal) {
+        var bodyInputs = modal.querySelectorAll('[data-test="modal-body"] input[type="number"]');
+        // The original price input is typically the second number input (after listing price)
+        if (bodyInputs.length >= 2) origPriceInput = bodyInputs[1];
+      }
       if (origPriceInput && settings.priceBuffer > 0) {
         var orig = (parseFloat(value) / (1 + settings.priceBuffer / 100)).toFixed(2);
         setReactValue(origPriceInput, orig);
@@ -84,7 +105,7 @@ const poshmarkConfig = {
       }
       var doneBtn = document.querySelector('[data-test="modal-footer"] .btn--primary') ||
                     document.querySelector('.modal__footer .btn--primary') ||
-                    document.querySelector('.listing-price-suggestion-modal .btn--primary');
+                    (modal && modal.querySelector('.btn--primary'));
       if (doneBtn) { doneBtn.click(); await sleep(500); }
       else { var closeBtn = document.querySelector('[data-test="modal-close-btn"]'); if (closeBtn) closeBtn.click(); }
     },

@@ -193,6 +193,8 @@ async function fillCombobox(inputId, menuId, searchText, config) {
   for (var ti = 0; ti < searchTerms.length; ti++) {
     var term = searchTerms[ti];
     if (!term || term.length < 1) continue;
+    input.click(); // prime the combobox before typing
+    await sleep(200);
     input.focus();
     await sleep(100);
     setReactValue(input, term);

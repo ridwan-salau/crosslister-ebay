@@ -89,11 +89,19 @@
       if (!modal || modal.offsetParent === null) break;
       await sleep(400);
     }
-    // Poll for the Continue button — it may render late or be disabled initially
+    // Poll for the Continue button — it may render late or be disabled initially.
+    // Use querySelectorAll to avoid matching the address modal's submit button.
     deadline = Date.now() + 8000;
     while (Date.now() < deadline) {
-      var btn = document.querySelector('button[type="submit"]');
-      if (btn && btn.innerText.indexOf('Continue') !== -1) {
+      var btn = null;
+      var btns = document.querySelectorAll('button[type="submit"]');
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].innerText.indexOf('Continue') !== -1 && btns[i].offsetParent !== null) {
+          btn = btns[i];
+          break;
+        }
+      }
+      if (btn) {
         if (btn.disabled) {
           console.log('[Crosslister:DP] Continue button disabled, waiting...');
           await sleep(500);

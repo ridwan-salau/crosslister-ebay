@@ -13,6 +13,20 @@ async function fillForm(platformConfig, item, settings) {
   const cfg = platformConfig;
   let filled = 0;
   const unmatched = []; // fields to batch-match via AI
+  var imageUploadPromise = null; // kicked off early, awaited when loop reaches images
+
+  // Kick off image upload immediately — it runs concurrently with field filling
+  var imageMapping = cfg.fieldMapping['images'];
+  if (imageMapping && imageMapping.source && item[imageMapping.source]) {
+    var imageValues = item[imageMapping.source];
+    if (imageValues && imageValues.length > 0) {
+      var imageInput = document.querySelector(cfg.selectors.imageUpload.input);
+      if (imageInput) {
+        var maxImg = imageMapping.maxImages || 8;
+        imageUploadPromise = uploadImages(imageValues, imageInput, maxImg, imageMapping.convertWebP);
+      }
+    }
+  }
 
   // Dismiss Poshmark error modal before filling starts
   var errModals = document.querySelectorAll('[data-test="modal-container"]');
@@ -23,8 +37,8 @@ async function fillForm(platformConfig, item, settings) {
     if (text.indexOf('Sorry') !== -1 || text.indexOf('Error') !== -1) {
       var okBtn = errModals[ei].querySelector('.btn--primary');
       debugLog(cfg.key, 'modal OK button found=' + !!okBtn + ' visible=' + (okBtn ? okBtn.offsetParent !== null : false));
-      if (okBtn && okBtn.offsetParent !== null) { okBtn.click(); debugLog(cfg.key, 'modal OK clicked'); await sleep(800); }
-      else if (okBtn) { okBtn.click(); debugLog(cfg.key, 'modal OK clicked (hidden)'); await sleep(800); }
+      if (okBtn && okBtn.offsetParent !== null) { okBtn.click(); debugLog(cfg.key, 'modal OK clicked'); await sleep(400); }
+      else if (okBtn) { okBtn.click(); debugLog(cfg.key, 'modal OK clicked (hidden)'); await sleep(400); }
     }
   }
 
@@ -64,15 +78,23 @@ async function fillForm(platformConfig, item, settings) {
     const isImage = fieldName === 'images';
 
     if (isImage) {
-      const maxImages = mapping.maxImages || 8;
-      const fileInput = document.querySelector(cfg.selectors.imageUpload.input);
-      if (fileInput && value && value.length > 0) {
-        const count = await uploadImages(value, fileInput, maxImages, mapping.convertWebP);
-        if (count > 0) filled++;
-        // Post-images hook (e.g., dismiss covershot modal)
-        if (cfg.hooks && cfg.hooks.postImages) {
-          try { await cfg.hooks.postImages(value, settings); } catch (e) { debugLog(cfg.key, 'postImages hook failed', e); }
+      // Await the pre-started image upload (kicked off at the start of fillForm
+      // to run concurrently with field filling), or start now if it wasn't
+      // pre-started (e.g. fileInput wasn't available yet).
+      if (imageUploadPromise) {
+        var imgCount = await imageUploadPromise;
+        if (imgCount > 0) filled++;
+      } else {
+        const maxImages = mapping.maxImages || 8;
+        const fileInput = document.querySelector(cfg.selectors.imageUpload.input);
+        if (fileInput && value && value.length > 0) {
+          const count = await uploadImages(value, fileInput, maxImages, mapping.convertWebP);
+          if (count > 0) filled++;
         }
+      }
+      // Post-images hook (e.g., dismiss covershot modal)
+      if (cfg.hooks && cfg.hooks.postImages) {
+        try { await cfg.hooks.postImages(value, settings, item); } catch (e) { debugLog(cfg.key, 'postImages hook failed', e); }
       }
       continue;
     }
@@ -135,6 +157,7 @@ async function fillForm(platformConfig, item, settings) {
       if (fieldCfg.optionRole) comboConfig.optionRole = fieldCfg.optionRole;
       if (fieldCfg.disabledAttr) comboConfig.disabledAttr = fieldCfg.disabledAttr;
       if (fieldCfg.twoLevel) comboConfig.twoLevel = true;
+      if (fieldCfg.deferSub) comboConfig.deferSub = true;
 
       // Pre-combobox hook (e.g., select tab / country before reading options)
       var prehook = 'pre' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
@@ -155,25 +178,43 @@ async function fillForm(platformConfig, item, settings) {
         if (options.length > 0) {
           unmatched.push({
             field: fieldName, sourceValue: String(value),
-            context: [item.title, item.description, item.itemSpecifics].filter(Boolean).join(' | '),
+            context: [item.itemSpecifics].filter(Boolean).join(' | '),
             options, inputSelector: input, menuSelector: menu, useClick: useClick,
             optionRole: comboConfig.optionRole, disabledAttr: comboConfig.disabledAttr,
           });
           debugLog(cfg.key, 'AI prefer: queued ' + fieldName + ' with ' + options.length + ' options');
         } else {
-          // Couldn't read options — fall back to fuzzy matching
-          debugLog(cfg.key, 'AI prefer: no options for ' + fieldName + ', falling back to fuzzy');
-          var result = useClick
-            ? await fillClickDropdown(input, menu, searchVal, comboConfig)
-            : await fillCombobox(input, menu, searchVal, comboConfig);
-          debugLog(cfg.key, 'combobox result ' + fieldName, result);
-          if (result.success) {
-            filled++;
-            var chook2 = 'post' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
-            if (cfg.hooks && cfg.hooks[chook2]) {
-              try { await cfg.hooks[chook2](searchVal, settings); } catch (e) { debugLog(cfg.key, chook2 + ' hook failed', e); }
-            }
-          } else if (result.reason === 'no-match') {
+          // Couldn't read options. For category comboboxes that require typing
+          // to show options (e.g. Depop), retry with the audience/gender as the
+          // search term to ensure we only see options from the correct section.
+          var retryOpts = [];
+          if (!useClick && fieldName === 'category') {
+            var retryTerm = extractAudience(searchVal) || extractLeafCategory(searchVal) || searchVal;
+            retryOpts = await readComboboxOptionsWithSearch(input, menu, retryTerm, comboConfig);
+            debugLog(cfg.key, 'AI prefer: retry search "' + retryTerm + '" → ' + retryOpts.length + ' options');
+          }
+          if (retryOpts.length > 0) {
+            unmatched.push({
+              field: fieldName, sourceValue: String(value),
+              context: [item.itemSpecifics].filter(Boolean).join(' | '),
+              options: retryOpts, inputSelector: input, menuSelector: menu, useClick: useClick,
+              optionRole: comboConfig.optionRole, disabledAttr: comboConfig.disabledAttr,
+            });
+            debugLog(cfg.key, 'AI prefer: retry queued ' + fieldName + ' with ' + retryOpts.length + ' options');
+          } else {
+            // Still nothing — fall back to fuzzy matching
+            debugLog(cfg.key, 'AI prefer: no options for ' + fieldName + ', falling back to fuzzy');
+            var result = useClick
+              ? await fillClickDropdown(input, menu, searchVal, comboConfig)
+              : await fillCombobox(input, menu, searchVal, comboConfig);
+            debugLog(cfg.key, 'combobox result ' + fieldName, result);
+            if (result.success) {
+              filled++;
+              var chook2 = 'post' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
+              if (cfg.hooks && cfg.hooks[chook2]) {
+                try { await cfg.hooks[chook2](searchVal, settings); } catch (e) { debugLog(cfg.key, chook2 + ' hook failed', e); }
+              }
+            } else if (result.reason === 'no-match') {
             // Still no match — collect whatever options we have for AI fallback
             if (options.length === 0) {
               // Re-read options with a different approach
@@ -181,6 +222,7 @@ async function fillForm(platformConfig, item, settings) {
             }
           }
         }
+      }
       } else {
         var result = useClick
           ? await fillClickDropdown(input, menu, searchVal, comboConfig)
@@ -191,7 +233,7 @@ async function fillForm(platformConfig, item, settings) {
           // Post-fill hook for comboboxes (e.g., wait for dependent dropdown)
           var chook = 'post' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
           if (cfg.hooks && cfg.hooks[chook]) {
-            try { await cfg.hooks[chook](searchVal, settings); } catch (e) { debugLog(cfg.key, chook + ' hook failed', e); }
+            try { await cfg.hooks[chook](searchVal, settings, item); } catch (e) { debugLog(cfg.key, chook + ' hook failed', e); }
           }
         } else if (mapping.aiBatchable && settings.geminiKey) {
           // Fallback: collect for batch AI matching
@@ -201,7 +243,7 @@ async function fillForm(platformConfig, item, settings) {
           if (options.length > 0) {
             unmatched.push({
               field: fieldName, sourceValue: String(value),
-              context: [item.title, item.description, item.itemSpecifics].filter(Boolean).join(' | '),
+              context: [item.itemSpecifics].filter(Boolean).join(' | '),
               options, inputSelector: input, menuSelector: menu, useClick: useClick,
               optionRole: comboConfig.optionRole, disabledAttr: comboConfig.disabledAttr,
             });
@@ -236,7 +278,7 @@ async function fillForm(platformConfig, item, settings) {
           if (field.useClick && field.optionRole && field.inputSelector && field.menuSelector) {
             var fieldCfg = cfg.selectors.combobox[r.field];
             if (fieldCfg && fieldCfg.twoLevel) {
-              await sleep(800);
+              await sleep(500);
               var subMenu = resolveEl(field.menuSelector);
               if (subMenu) {
                 var subRole = field.optionRole || '.dropdown__link';
@@ -251,21 +293,52 @@ async function fillForm(platformConfig, item, settings) {
                   }
                 }
                 if (subOptions.length > 0) {
-                  var leaf = extractLeafCategory(field.sourceValue) || field.sourceValue;
-                  var bestSub = null, bestSubScore = 0;
-                  for (var ssi = 0; ssi < subOptions.length; ssi++) {
-                    var subScore = matchScore(leaf, subOptions[ssi].innerText.trim());
-                    if (subScore > bestSubScore) { bestSubScore = subScore; bestSub = subOptions[ssi]; }
+                  var subOptionTexts = subOptions.map(function(o) { return o.innerText.trim(); });
+                  var matchedSubIdx = -1;
+
+                  // Use AI to pick the best subcategory when available
+                  if (settings.preferAi && settings.geminiKey) {
+                    var subField = {
+                      field: r.field + '_sub',
+                      sourceValue: field.sourceValue,
+                      context: [item.itemSpecifics].filter(Boolean).join(' | '),
+                      options: subOptionTexts
+                    };
+                    var subResults = await batchMatchViaBackground([subField], cfg.key);
+                    console.log('[Crosslister:' + cfg.key + '] AI twoLevel sub results: ' + JSON.stringify(subResults));
+                    if (subResults.length > 0 && subResults[0].matchedIndex >= 0) {
+                      matchedSubIdx = subResults[0].matchedIndex;
+                    }
                   }
-                  if (bestSub && bestSubScore >= 0.15) {
-                    console.log('[Crosslister:' + cfg.key + '] AI twoLevel sub: clicking "' + bestSub.innerText.trim() + '" score=' + bestSubScore);
-                    var subLink = bestSub.querySelector('a') || bestSub;
+
+                  // Fall back to fuzzy matching if AI not available or didn't match
+                  if (matchedSubIdx < 0) {
+                    var leaf = extractLeafCategory(field.sourceValue) || field.sourceValue;
+                    var bestSubScore = 0;
+                    for (var ssi = 0; ssi < subOptions.length; ssi++) {
+                      var subScore = matchScore(leaf, subOptions[ssi].innerText.trim());
+                      if (subScore > bestSubScore) { bestSubScore = subScore; matchedSubIdx = ssi; }
+                    }
+                    if (bestSubScore < 0.15) matchedSubIdx = -1;
+                    if (matchedSubIdx >= 0) {
+                      console.log('[Crosslister:' + cfg.key + '] AI twoLevel sub (fuzzy): "' + subOptionTexts[matchedSubIdx] + '" score=' + bestSubScore);
+                    }
+                  }
+
+                  if (matchedSubIdx >= 0 && matchedSubIdx < subOptions.length) {
+                    console.log('[Crosslister:' + cfg.key + '] AI twoLevel sub: clicking "' + subOptionTexts[matchedSubIdx] + '"');
+                    var subLink = subOptions[matchedSubIdx].querySelector('a') || subOptions[matchedSubIdx];
                     subLink.click();
-                    await sleep(600);
+                    await sleep(400);
                   }
                 }
               }
             }
+          }
+          // Run post-hook for AI-applied fields (e.g. Poshmark postSize clicks Done)
+          var postHookName = 'post' + r.field.charAt(0).toUpperCase() + r.field.slice(1);
+          if (cfg.hooks && cfg.hooks[postHookName]) {
+            try { await cfg.hooks[postHookName](field.sourceValue, settings, item); } catch (e) { debugLog(cfg.key, postHookName + ' hook failed', e); }
           }
         } else { debugLog(cfg.key, 'AI failed to apply ' + r.field); }
       }
@@ -297,7 +370,7 @@ async function fillForm(platformConfig, item, settings) {
       var chook = 'postCategory';
       if (cfg.hooks && cfg.hooks[chook]) {
         var catVal = item['category'] || '';
-        try { await cfg.hooks[chook](catVal, settings); } catch (e) { debugLog(cfg.key, chook + ' hook failed', e); }
+        try { await cfg.hooks[chook](catVal, settings, item); } catch (e) { debugLog(cfg.key, chook + ' hook failed', e); }
       }
       await sleep(cfg.categoryWaitMs || 1500);
 
@@ -325,7 +398,7 @@ async function fillForm(platformConfig, item, settings) {
           if (dfSourceVal) {
             secondPass.push({
               field: dfName, sourceValue: String(dfSourceVal),
-              context: [item.title, item.description, item.itemSpecifics].filter(Boolean).join(' | '),
+              context: [item.itemSpecifics].filter(Boolean).join(' | '),
               options: dfOptions, inputSelector: dfCfg.input, menuSelector: dfCfg.menu,
               useClick: dfUseClick, optionRole: dfComboConfig.optionRole, disabledAttr: dfComboConfig.disabledAttr,
             });
@@ -349,7 +422,15 @@ async function fillForm(platformConfig, item, settings) {
             var app2 = f2.useClick
               ? await clickDropdownOption(f2.inputSelector, f2.menuSelector, r2.matchedIndex, fc2)
               : await clickComboboxOption(f2.inputSelector, f2.menuSelector, r2.matchedIndex, fc2);
-            if (app2) { filled++; debugLog(cfg.key, 'AI second pass applied ' + r2.field + ' index ' + r2.matchedIndex); }
+            if (app2) {
+              filled++;
+              debugLog(cfg.key, 'AI second pass applied ' + r2.field + ' index ' + r2.matchedIndex);
+              // Run post-hook (e.g. Poshmark postSize clicks Done)
+              var postHook2 = 'post' + r2.field.charAt(0).toUpperCase() + r2.field.slice(1);
+              if (cfg.hooks && cfg.hooks[postHook2]) {
+                try { await cfg.hooks[postHook2](f2.sourceValue, settings, item); } catch (e) { debugLog(cfg.key, postHook2 + ' hook failed', e); }
+              }
+            }
           }
         }
       }

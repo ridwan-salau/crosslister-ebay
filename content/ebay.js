@@ -177,6 +177,13 @@ async function handleCopyMulti(platforms) {
         btn.innerText = '✓ Done';
         btn.style.background = '#2ecc71';
         status.innerText = '✓ Opened ' + platforms.length + ' platform(s)';
+        // Auto-reset to default state after a few seconds so the button
+        // can be re-used without the page needing a refresh.
+        setTimeout(function() {
+          btn.innerText = '📦 Cross-list to...';
+          btn.style.background = '#333';
+          status.innerText = '';
+        }, 4000);
         return;
       }
       var p = platforms[pIndex++];

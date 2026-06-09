@@ -77,7 +77,7 @@
     if (cb && !cb.checked) {
       console.log('[Crosslister:DP] enabling worldwide shipping');
       cb.click();
-      await sleep(400);
+      await sleep(200);
     }
   }
 
@@ -87,7 +87,7 @@
     while (Date.now() < deadline) {
       var modal = document.getElementById('add-address-modal');
       if (!modal || modal.offsetParent === null) break;
-      await sleep(400);
+      await sleep(200);
     }
     // Poll for the Continue button — it may render late or be disabled initially.
     // Use querySelectorAll to avoid matching the address modal's submit button.
@@ -104,17 +104,17 @@
       if (btn) {
         if (btn.disabled) {
           console.log('[Crosslister:DP] Continue button disabled, waiting...');
-          await sleep(500);
+          await sleep(300);
           continue;
         }
         console.log('[Crosslister:DP] clicking Continue');
         btn.scrollIntoView({ block: 'center' });
         await sleep(200);
         btn.click();
-        await sleep(1500);
+        await sleep(1000);
         return;
       }
-      await sleep(500);
+      await sleep(300);
     }
     console.log('[Crosslister:DP] Continue button not found or still disabled after timeout');
   }
@@ -137,7 +137,7 @@
     if (!addBtn) { console.log('[Crosslister:DP] Add shipping address button not found'); return; }
     console.log('[Crosslister:DP] clicking Add new shipping address');
     addBtn.click();
-    await sleep(1200);
+    await sleep(600);
 
     var modal = document.getElementById('add-address-modal') ||
                 document.querySelector('aside[aria-label="Add new shipping address"]');
@@ -212,12 +212,12 @@
       }
     }
 
-    await sleep(400);
+    await sleep(200);
     var submitBtn = modal.querySelector('button[type="submit"]');
     if (submitBtn) {
       console.log('[Crosslister:DP] submitting address');
       submitBtn.click();
-      await sleep(1000);
+      await sleep(500);
     }
   }
 })();

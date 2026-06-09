@@ -80,8 +80,17 @@ async function batchMatch(unmatchedFields, platformName) {
     `Field: ${u.field}\nSource value: "${u.sourceValue}"${u.context ? `\nContext: ${u.context}` : ''}\nOptions:\n${u.options.map((o, i) => `${i}: ${o}`).join('\n')}`
   ).join('\n\n');
 
-  const systemPrompt = `You are a product listing assistant matching values across marketplaces. Given a source value and a list of target options, pick the best matching index. Consider sizing conventions, category differences, and regional variations specific to ${platformName}.`;
-  const userPrompt = `Match each field below to the closest option. Return a JSON array with the matched index for each field.\n\n${fieldsText}`;
+  const systemPrompt = `You are a product listing assistant matching values across marketplaces. Given a source value and a list of target options, pick the best matching index.
+
+The "Source value" is the primary determinant — it comes directly from the original listing's category or attribute and carries the most reliable signal. Match against it first.
+
+"Context" (title, description, item specifics) is supplementary. Only use context to break ties or when the source value alone is insufficient to decide among the options. Do not let context override a clear signal from the source value.`;
+
+  var userPrompt = `Match each field below to the closest option. Return a JSON array with the matched index for each field.\n\n`;
+  if (unmatchedFields.some(function(u) { return u.field === 'category' || u.field === 'twoLevelSub' || u.field === 'subcategory'; })) {
+    userPrompt += `For category fields: prioritize the Source value (eBay category path). Context is only for tie-breaking.\n\n`;
+  }
+  userPrompt += fieldsText;
 
   const schema = {
     type: 'array',

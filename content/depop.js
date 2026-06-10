@@ -5,13 +5,16 @@
   const platform = getPlatformForUrl(url);
   if (!platform || platform.key !== 'depop') return;
 
+  var stagingId = (window.location.hash || '').match(/xlister=([^&]*)/);
+  stagingId = stagingId ? stagingId[1] : undefined;
+
   const bannerObj = makeBanner({
     text: '📦 Loading...',
     color: platform.colorGradient,
     onClick: null,
   });
 
-  safeSendMessage({ action: 'GET_STAGED_LISTING' }, async (response) => {
+  safeSendMessage({ action: 'GET_STAGED_LISTING', id: stagingId }, async (response) => {
     if (!response || !response.item) {
       bannerObj.remove();
       return;
@@ -50,11 +53,18 @@
       settings.address = ps.address || null;
       settings.worldwide = !!ps.worldwide;
       settings.preferAi = ps.preferAi !== undefined ? !!ps.preferAi : true;
+
+      // Remove any existing draft images before uploading new ones.
+      // Depop saves listings as server-side drafts — if the page loads
+      // with images from a previous listing, the file input is hidden
+      // and uploadImages silently skips.
+      await clearExistingImages();
+
       const result = await fillForm(depopConfig, item, settings);
       await fillShippingAddress(settings);
       await applyWorldwideShipping(settings);
       await clickContinue();
-      safeSendMessage({ action: 'CONSUME_STAGED' }, () => {});
+      safeSendMessage({ action: 'CONSUME_STAGED', id: stagingId }, () => {});
       safeSendMessage({
         action: 'LOG_LISTING',
         data: { ebayTitle: item.title, ebayId: item.itemId, price: item.price }
@@ -67,6 +77,35 @@
     } catch (e) {
       console.error('[Crosslister:DP] doFill error:', e);
       bannerObj.setError('Error: ' + e.message);
+    }
+  }
+
+  // Remove any existing images from a previous draft so the file input
+  // reappears and uploadImages can populate fresh images from eBay.
+  async function clearExistingImages() {
+    // Loop until no delete buttons remain — React may re-render after
+    // each removal, requiring multiple passes.
+    var totalRemoved = 0;
+    for (var round = 0; round < 10; round++) {
+      var deleteBtns = document.querySelectorAll('button[class*="delete"]');
+      var visible = Array.from(deleteBtns).filter(function (b) { return b.offsetParent !== null; });
+      if (visible.length === 0) break;
+      console.log('[Crosslister:DP] clearExistingImages round ' + round + ': removing ' + visible.length + ' images');
+      for (var i = 0; i < visible.length; i++) {
+        visible[i].click();
+        totalRemoved++;
+        await sleep(400);
+      }
+      await sleep(600); // let React re-render before next round
+    }
+    if (totalRemoved > 0) {
+      console.log('[Crosslister:DP] removed ' + totalRemoved + ' draft images, waiting for upload input');
+      var deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        var uploadInput = document.querySelector('#upload-input__input');
+        if (uploadInput && uploadInput.offsetParent !== null) break;
+        await sleep(300);
+      }
     }
   }
 

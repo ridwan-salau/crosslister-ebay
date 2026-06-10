@@ -9,16 +9,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // --- eBay staging ---
   if (request.action === 'STAGE_LISTING') {
-    setStaged(request.data);
+    setStaged(request.data, request.id);
     sendResponse({ success: true });
   }
 
   if (request.action === 'GET_STAGED_LISTING') {
-    sendResponse({ item: getStaged() });
+    sendResponse({ item: getStaged(request.id) });
   }
 
   if (request.action === 'CONSUME_STAGED') {
-    consumeStaged();
+    consumeStaged(request.id);
     sendResponse({ success: true });
   }
 

@@ -170,6 +170,7 @@ async function handleCopyMulti(platforms) {
     status.innerText = 'Opening ' + names + '...';
 
     // Stage and open each platform sequentially so each tab gets fresh data
+    var stagingId = Date.now().toString(36) + '.' + Math.random().toString(36).slice(2, 6);
     var pIndex = 0;
     function openNext() {
       if (pIndex >= platforms.length) {
@@ -187,7 +188,7 @@ async function handleCopyMulti(platforms) {
         return;
       }
       var p = platforms[pIndex++];
-      chrome.runtime.sendMessage({ action: 'STAGE_LISTING', data: data }, function(response) {
+      chrome.runtime.sendMessage({ action: 'STAGE_LISTING', data: data, id: stagingId }, function(response) {
         if (chrome.runtime.lastError || !response || !response.success) {
           status.innerText = 'Error: ' + (chrome.runtime.lastError?.message || 'unknown');
           btn.disabled = false;
@@ -195,7 +196,9 @@ async function handleCopyMulti(platforms) {
           btn.style.background = '#333';
           return;
         }
-        window.open(p.createUrl, '_blank');
+        var url = p.createUrl;
+        url += '#xlister=' + stagingId;
+        window.open(url, '_blank');
         setTimeout(openNext, 500);
       });
     }

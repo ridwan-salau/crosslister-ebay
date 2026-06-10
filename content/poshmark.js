@@ -6,6 +6,9 @@
   var platform = getPlatformForUrl(url);
   if (!platform || platform.key !== 'poshmark') return;
 
+  var stagingId = (window.location.hash || '').match(/xlister=([^&]*)/);
+  stagingId = stagingId ? stagingId[1] : undefined;
+
   var bannerObj = makeBanner({
     text: '📦 Loading...',
     color: platform.colorGradient,
@@ -13,7 +16,7 @@
   });
   console.log('PM banner created');
 
-  safeSendMessage({ action: 'GET_STAGED_LISTING' }, function (response) {
+  safeSendMessage({ action: 'GET_STAGED_LISTING', id: stagingId }, function (response) {
     console.log('PM staged response:', !!response, !!(response && response.item));
     if (!response || !response.item) { bannerObj.remove(); return; }
 
@@ -55,7 +58,7 @@
           console.log('[Crosslister:PM] clicking Next');
           nextBtn.click();
         }
-        safeSendMessage({ action: 'CONSUME_STAGED' }, function () {});
+        safeSendMessage({ action: 'CONSUME_STAGED', id: stagingId }, function () {});
         safeSendMessage({
           action: 'LOG_LISTING',
           data: { ebayTitle: item.title, ebayId: item.itemId, price: item.price }

@@ -6,7 +6,10 @@
   const platform = getPlatformForUrl(url);
   if (!platform || platform.key !== 'mercari') return;
 
-  safeSendMessage({ action: 'GET_STAGED_LISTING' }, async (response) => {
+  var stagingId = (window.location.hash || '').match(/xlister=([^&]*)/);
+  stagingId = stagingId ? stagingId[1] : undefined;
+
+  safeSendMessage({ action: 'GET_STAGED_LISTING', id: stagingId }, async (response) => {
     if (!response || !response.item) return;
 
     const bannerObj = makeBanner({
@@ -22,7 +25,7 @@
       settings.priceBuffer = ps.priceBuffer ?? 0;
       settings.preferAi = ps.preferAi !== undefined ? !!ps.preferAi : true;
       const result = await fillForm(mercariConfig, response.item, settings);
-      safeSendMessage({ action: 'CONSUME_STAGED' }, () => {});
+      safeSendMessage({ action: 'CONSUME_STAGED', id: stagingId }, () => {});
       bannerObj.update(`✓ Done! ${result.filledCount} fields filled.`);
     };
   });

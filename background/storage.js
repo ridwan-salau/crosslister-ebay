@@ -1,6 +1,9 @@
 // background/storage.js — state management for the extension
 
-let stagedItem = null;
+const DEFAULT_SLOT = '_default';
+const STAGED_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+let stagedItems = new Map();
 let listingHistory = [];
 let signupCount = 0;
 let signupThreshold = 0;
@@ -33,25 +36,31 @@ function saveHistory() {
 
 // --- Public API ---
 
-function getStaged() {
-  return stagedItem;
+function getStaged(id) {
+  var key = id || DEFAULT_SLOT;
+  return stagedItems.get(key) || null;
 }
 
-function setStaged(data) {
-  stagedItem = { ...data, stagedAt: Date.now() };
-  // Persist for MV3 service worker safety (workers can be terminated anytime)
-  chrome.storage.local.set({ stagedItem: stagedItem });
+function setStaged(data, id) {
+  var key = id || DEFAULT_SLOT;
+  stagedItems.set(key, { ...data, stagedAt: Date.now() });
+  // Auto-expire after TTL to prevent stale data accumulation
+  setTimeout(function () {
+    var item = stagedItems.get(key);
+    if (item && Date.now() - item.stagedAt >= STAGED_TTL_MS) {
+      stagedItems.delete(key);
+    }
+  }, STAGED_TTL_MS);
 }
 
-function consumeStaged() {
-  stagedItem = null;
-  chrome.storage.local.remove('stagedItem');
+function consumeStaged(id) {
+  if (id) {
+    stagedItems.delete(id);
+  } else {
+    // No ID: clear all staged items (used by popup "Clear Staged" button)
+    stagedItems.clear();
+  }
 }
-
-// Restore staged item on startup (service worker may have been restarted)
-chrome.storage.local.get(['stagedItem'], function (result) {
-  if (result.stagedItem) stagedItem = result.stagedItem;
-});
 
 function logListing(data) {
   listingHistory.unshift({
